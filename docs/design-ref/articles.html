@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Cognest — 文章</title>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/app.css"/>
+<style>
+/* ── Articles layout ───────────────────────── */
+.articles-shell{display:flex;flex:1;overflow:hidden}
+
+/* Left: list + filters */
+.art-list-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.art-header{padding:24px 32px 0;flex:0 0 auto}
+.art-header h1{font:600 var(--text-xl)/1.15 var(--font-display);letter-spacing:-0.01em;margin-bottom:16px}
+.art-bar{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.art-search{flex:1;min-width:200px;padding:9px 12px 9px 36px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);font-size:var(--text-sm);color:var(--fg);outline:none;transition:border-color var(--motion-fast);background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2386868b' stroke-width='1.5'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m13 13-2.5-2.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:12px center}
+.art-search:focus{border-color:var(--accent)}
+.art-search::placeholder{color:var(--meta)}
+
+/* Filter chips */
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.filters button{font-size:var(--text-sm);font-weight:500;color:var(--fg-2);background:var(--surface);border:1px solid var(--border-soft);border-radius:var(--radius-pill);padding:6px 13px;transition:all var(--motion-fast)}
+.filters button:hover{border-color:var(--meta)}
+.filters button.on{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+
+/* Tag filter row */
+.tag-row{display:flex;gap:6px;padding:0 32px 12px;flex-wrap:wrap;flex:0 0 auto}
+.tag-chip{font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--radius-pill);cursor:pointer;transition:all var(--motion-fast)}
+.tag-chip.t-ai{color:#7c3aed;background:color-mix(in oklab,#7c3aed,transparent 90%)}
+.tag-chip.t-eng{color:var(--accent);background:color-mix(in oklab,var(--accent),transparent 90%)}
+.tag-chip.t-prod{color:#b45309;background:color-mix(in oklab,#b45309,transparent 88%)}
+.tag-chip.t-phil{color:var(--success);background:color-mix(in oklab,var(--success),transparent 88%)}
+.tag-chip:hover{opacity:0.75}
+.tag-chip.on{box-shadow:0 0 0 2px var(--fg)}
+
+/* Article list */
+.art-list{flex:1;overflow-y:auto;padding:0 24px 32px}
+.art-row{display:flex;align-items:center;gap:16px;padding:14px 12px;border-bottom:1px solid var(--border-soft);cursor:pointer;transition:background var(--motion-fast);border-radius:var(--radius-sm)}
+.art-row:hover{background:var(--surface)}
+.art-row.selected{background:color-mix(in oklab,var(--accent),transparent 94%);border-color:transparent}
+.art-row .ar-main{flex:1;min-width:0}
+.art-row .ar-title{font:500 var(--text-base)/1.3 var(--font-body);color:var(--fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.art-row .ar-excerpt{font-size:var(--text-sm);color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.art-row .ar-meta{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.art-row .ar-status{font-size:11px;font-weight:600;padding:3px 8px;border-radius:var(--radius-pill)}
+.art-row .ar-status.draft{color:#92400e;background:color-mix(in oklab,var(--warn),transparent 85%)}
+.art-row .ar-status.editing{color:var(--accent);background:color-mix(in oklab,var(--accent),transparent 88%)}
+.art-row .ar-status.done{color:var(--success);background:color-mix(in oklab,var(--success),transparent 85%)}
+.art-row .ar-date{font-size:var(--text-xs);color:var(--meta);white-space:nowrap}
+.art-row .ar-words{font-size:var(--text-xs);color:var(--meta);font-family:var(--font-mono)}
+.art-row .ar-tags{display:flex;gap:4px}
+.art-row .ar-tag{font-size:10px;font-weight:500;padding:2px 6px;border-radius:var(--radius-pill);color:var(--muted);background:var(--surface);border:1px solid var(--border-soft)}
+
+/* Right: preview panel */
+.preview-panel{width:380px;flex:0 0 380px;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.preview-panel.empty{display:flex;align-items:center;justify-content:center}
+.preview-empty{text-align:center;color:var(--muted);font-size:var(--text-sm);padding:32px}
+.preview-empty svg{width:40px;height:40px;color:var(--border);margin-bottom:12px}
+.preview-head{padding:20px 22px 16px;border-bottom:1px solid var(--border-soft);flex:0 0 auto}
+.preview-head h2{font:600 var(--text-lg)/1.2 var(--font-display);margin-bottom:8px}
+.preview-head .pm{display:flex;align-items:center;gap:10px;font-size:var(--text-sm);color:var(--meta);flex-wrap:wrap}
+.preview-head .pm .ar-status{font-size:11px;font-weight:600;padding:3px 8px;border-radius:var(--radius-pill)}
+.preview-head .pm .ar-status.draft{color:#92400e;background:color-mix(in oklab,var(--warn),transparent 85%)}
+.preview-head .pm .ar-status.done{color:var(--success);background:color-mix(in oklab,var(--success),transparent 85%)}
+.preview-actions{display:flex;gap:8px;padding:14px 22px;border-bottom:1px solid var(--border-soft);flex:0 0 auto}
+.preview-body{flex:1;overflow-y:auto;padding:20px 22px 32px;font-size:var(--text-sm);color:var(--fg-2);line-height:1.7}
+.preview-body h3{font:600 var(--text-base)/1.3 var(--font-display);color:var(--fg);margin:20px 0 8px}
+.preview-body h3:first-child{margin-top:0}
+.preview-body p{margin-bottom:12px}
+.preview-body blockquote{border-left:2px solid var(--accent);padding-left:12px;color:var(--muted);margin:12px 0;font-style:italic}
+.preview-tags{display:flex;gap:6px;flex-wrap:wrap;padding:0 22px 16px}
+.preview-tags .ar-tag{font-size:11px;font-weight:500;padding:4px 10px;border-radius:var(--radius-pill);color:var(--fg-2);background:var(--surface);border:1px solid var(--border-soft)}
+</style>
+</head>
+<body>
+<div class="win" id="app">
+  <div class="win-body">
+  <!-- Sidebar -->
+  <aside class="side">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+      <b>Cognest</b>
+      <button class="side-toggle" onclick="toggleSidebar()" title="收起侧边栏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 18l-6-6 6-6"/></svg></button>
+    </div>
+    <button class="capture-btn" onclick="openCapture()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="t">快速记录</span>
+      <kbd>⌘⇧Space</kbd>
+    </button>
+    <nav class="nav">
+      <div class="lbl">空间</div>
+      <a href="discover.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>发现</a>
+      <a href="compose.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>创作</a>
+      <a href="capture.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16v16H4z"/><path d="M9 9h6M9 13h4"/></svg>碎片<span class="cnt">142</span></a>
+      <a href="articles.html" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h12"/></svg>文章<span class="cnt">7</span></a>
+    </nav>
+  </aside>
+
+  <!-- Articles workspace -->
+  <div class="articles-shell">
+    <!-- Left: list -->
+    <div class="art-list-panel">
+      <div class="art-header">
+        <h1>文章</h1>
+        <div class="art-bar">
+          <input class="art-search" type="text" placeholder="搜索文章标题或内容…"/>
+          <div class="filters">
+            <button class="on" onclick="filterStatus(this,'all')">全部</button>
+            <button onclick="filterStatus(this,'draft')">草稿</button>
+            <button onclick="filterStatus(this,'editing')">修改中</button>
+            <button onclick="filterStatus(this,'done')">已完成</button>
+          </div>
+        </div>
+      </div>
+      <div class="tag-row">
+        <span class="tag-chip t-ai" onclick="toggleTag(this)">AI/Agent</span>
+        <span class="tag-chip t-eng" onclick="toggleTag(this)">工程</span>
+        <span class="tag-chip t-prod" onclick="toggleTag(this)">产品</span>
+        <span class="tag-chip t-phil" onclick="toggleTag(this)">思维</span>
+      </div>
+
+      <div class="art-list" id="art-list">
+        <div class="art-row selected" onclick="selectArticle(this,0)">
+          <div class="ar-main">
+            <div class="ar-title">Context Engineering 方法论</div>
+            <div class="ar-excerpt">从 Prompt Engineering 到 Context Engineering 的范式跃迁</div>
+          </div>
+          <div class="ar-meta">
+            <div class="ar-tags"><span class="ar-tag">AI</span><span class="ar-tag">工程</span></div>
+            <span class="ar-status draft">草稿</span>
+            <span class="ar-words">2,847</span>
+            <span class="ar-date">今天</span>
+          </div>
+        </div>
+        <div class="art-row" onclick="selectArticle(this,1)">
+          <div class="ar-main">
+            <div class="ar-title">MCP 协议设计哲学</div>
+            <div class="ar-excerpt">为什么 Model Context Protocol 选择了这种约束式设计</div>
+          </div>
+          <div class="ar-meta">
+            <div class="ar-tags"><span class="ar-tag">AI</span><span class="ar-tag">工程</span></div>
+            <span class="ar-status draft">草稿</span>
+            <span class="ar-words">1,204</span>
+            <span class="ar-date">昨天</span>
+          </div>
+        </div>
+        <div class="art-row" onclick="selectArticle(this,2)">
+          <div class="ar-main">
+            <div class="ar-title">Agent Memory 的本质</div>
+            <div class="ar-excerpt">记忆不是存储，是在有限窗口中还原历史语义的能力</div>
+          </div>
+          <div class="ar-meta">
+            <div class="ar-tags"><span class="ar-tag">AI</span></div>
+            <span class="ar-status done">已完成</span>
+            <span class="ar-words">4,312</span>
+            <span class="ar-date">6月20日</span>
+          </div>
+        </div>
+        <div class="art-row" onclick="selectArticle(this,3)">
+          <div class="ar-main">
+            <div class="ar-title">知识管理的终局：从文件夹到语义图</div>
+            <div class="ar-excerpt">为什么传统知识管理软件注定需要 AI 重构</div>
+          </div>
+          <div class="ar-meta">
+            <div class="ar-tags"><span class="ar-tag">产品</span><span class="ar-tag">AI</span></div>
+            <span class="ar-status done">已完成</span>
+            <span class="ar-words">3,876</span>
+            <span class="ar-date">6月15日</span>
+          </div>
+        </div>
+        <div class="art-row" onclick="selectArticle(this,4)">
+          <div class="ar-main">
+            <div class="ar-title">RAG 不是答案，Context Pipeline 才是</div>
+            <div class="ar-excerpt">单纯的向量检索无法解决上下文质量问题</div>
+          </div>
+          <div class="ar-meta">
+            <div class="ar-tags"><span class="ar-tag">AI</span><span class="ar-tag">工程</span></div>
+            <span class="ar-status editing">修改中</span>
+            <span class="ar-words">2,156</span>
+            <span class="ar-date">6月12日</span>
+          </div>
+        </div>
+        <div class="art-row" onclick="selectArticle(this,5)">
+          <div class="ar-main">
+            <div class="ar-title">决策疲劳与认知卸载</div>
+            <div class="ar-excerpt">为什么把组织工作交给 AI 不只是效率问题</div>
+          </div>
+          <div class="ar-meta">
+            <div class="ar-tags"><span class="ar-tag">思维</span></div>
+            <span class="ar-status done">已完成</span>
+            <span class="ar-words">1,890</span>
+            <span class="ar-date">6月8日</span>
+          </div>
+        </div>
+        <div class="art-row" onclick="selectArticle(this,6)">
+          <div class="ar-main">
+            <div class="ar-title">Karpathy LLM Wiki 理念解读</div>
+            <div class="ar-excerpt">从 Raw Memory 到 Knowledge Graph 的知识演化路径</div>
+          </div>
+          <div class="ar-meta">
+            <div class="ar-tags"><span class="ar-tag">AI</span><span class="ar-tag">产品</span></div>
+            <span class="ar-status editing">修改中</span>
+            <span class="ar-words">2,543</span>
+            <span class="ar-date">6月5日</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: preview -->
+    <div class="preview-panel" id="preview-panel">
+      <div class="preview-head">
+        <h2 id="pv-title">Context Engineering 方法论</h2>
+        <div class="pm">
+          <span class="ar-status draft" id="pv-status">草稿</span>
+          <span id="pv-words">2,847 字</span>
+          <span id="pv-date">最后编辑：今天 14:32</span>
+        </div>
+      </div>
+      <div class="preview-actions">
+        <a href="compose.html" class="btn-primary" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+          编辑
+        </a>
+        <button class="btn-secondary" onclick="showToast('导出 Markdown')">导出</button>
+        <button class="btn-secondary" onclick="showToast('已删除')" style="margin-left:auto;color:var(--danger)">删除</button>
+      </div>
+      <div class="preview-tags">
+        <span class="ar-tag">AI</span>
+        <span class="ar-tag">工程</span>
+        <span class="ar-tag">Context</span>
+        <span class="ar-tag">LLM</span>
+      </div>
+      <div class="preview-body" id="pv-body">
+        <h3>从 Prompt Engineering 到 Context Engineering</h3>
+        <p>过去一年，我们对 LLM 应用开发的理解经历了一次范式跃迁。早期的「Prompt Engineering」本质上是在优化单次输入；而「Context Engineering」关注的是如何在对的时间，让模型看到对的信息。</p>
+        <blockquote>RAG 的瓶颈不是检索精度，是检索到的上下文如何被模型有效利用。</blockquote>
+        <h3>Context Pipeline 的三个组件</h3>
+        <p>一个完整的 Context Pipeline 包括三个部分：RAG、Agent Memory、Tool Results。这三者的组装、排序、裁剪——就是 Context Engineering 的核心工作。</p>
+        <p>Prompt Engineering 的核心假设是「只要指令写得好，模型就能回答好」。Context Engineering 的核心假设是「模型的输出质量，取决于它接收到的上下文质量」。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var articles = [
+  {title:'Context Engineering 方法论',status:'draft',statusLabel:'草稿',words:'2,847',date:'今天 14:32',tags:['AI','工程','Context','LLM'],body:'<h3>从 Prompt Engineering 到 Context Engineering</h3><p>过去一年，我们对 LLM 应用开发的理解经历了一次范式跃迁。早期的「Prompt Engineering」本质上是在优化单次输入；而「Context Engineering」关注的是如何在对的时间，让模型看到对的信息。</p><blockquote>RAG 的瓶颈不是检索精度，是检索到的上下文如何被模型有效利用。</blockquote><h3>Context Pipeline 的三个组件</h3><p>一个完整的 Context Pipeline 包括三个部分：RAG、Agent Memory、Tool Results。这三者的组装、排序、裁剪——就是 Context Engineering 的核心工作。</p>'},
+  {title:'MCP 协议设计哲学',status:'draft',statusLabel:'草稿',words:'1,204',date:'昨天 22:10',tags:['AI','工程','MCP'],body:'<h3>约束即自由</h3><p>MCP 选择了极度约束的设计——不试图做一个万能 API，而是定义一个最小化的「工具发现 + 调用」协议。这种约束看似限制了灵活性，实则降低了集成成本。</p><p>任何 AI Agent 只要实现 MCP client，就能调用任何 MCP-compatible 工具——无需学习每个工具的独特 API。</p>'},
+  {title:'Agent Memory 的本质',status:'done',statusLabel:'已完成',words:'4,312',date:'6月20日',tags:['AI','Agent','Memory'],body:'<h3>记忆 ≠ 存储</h3><p>Memory 的核心挑战不是存储，而是召回。它本质是长期 context 的压缩表示——需要在有限的 window 中还原出足够的历史语义。</p><h3>三种记忆层次</h3><p>短期（当前对话 context）、中期（session-level 摘要）、长期（跨 session 持久化）。每一层的压缩策略不同。</p>'},
+  {title:'知识管理的终局：从文件夹到语义图',status:'done',statusLabel:'已完成',words:'3,876',date:'6月15日',tags:['产品','AI','知识管理'],body:'<h3>文件夹是 20 世纪的隐喻</h3><p>我们用文件夹管理知识已经 40 年了。但人脑从来不是按文件夹组织信息的——它是网状的、关联的、按语义而非路径寻址的。</p><p>AI Native 的知识管理应该模仿人脑：自动建立关联、按语义检索、随时间演化。</p>'},
+  {title:'RAG 不是答案，Context Pipeline 才是',status:'editing',statusLabel:'修改中',words:'2,156',date:'6月12日',tags:['AI','工程','RAG'],body:'<h3>RAG 的局限性</h3><p>单纯的向量检索只解决了「找到相关文档」这一步。但把文档塞进 prompt 不等于模型能有效利用它——这是两个完全不同的问题。</p><p>Context Pipeline 在 RAG 之上加入了排序、裁剪、格式化、上下文窗口管理。</p>'},
+  {title:'决策疲劳与认知卸载',status:'done',statusLabel:'已完成',words:'1,890',date:'6月8日',tags:['思维','产品'],body:'<h3>整理本身就是消耗</h3><p>每次你决定「这条笔记放在哪个文件夹」「给它什么标签」，你消耗的不是时间，是认知资源。这些微决策累积成决策疲劳。</p><p>把组织工作交给 AI 不只是效率提升——是释放人类最稀缺的资源：判断力。</p>'},
+  {title:'Karpathy LLM Wiki 理念解读',status:'editing',statusLabel:'修改中',words:'2,543',date:'6月5日',tags:['AI','产品','Wiki'],body:'<h3>从 Raw Memory 到 Knowledge Graph</h3><p>Karpathy 提出的演化路径：Raw Memory → Topic → Note → Article → Wiki Page → Knowledge Graph。每一步都是对原始信息的一次结构化提升。</p><p>AI 在这个链路中的角色是自动维护结构——用户只需要输入和审核，不需要手动搬运。</p>'}
+];
+
+function selectArticle(el, idx) {
+  document.querySelectorAll('.art-row').forEach(r => r.classList.remove('selected'));
+  el.classList.add('selected');
+  var a = articles[idx];
+  document.getElementById('pv-title').textContent = a.title;
+  var st = document.getElementById('pv-status');
+  st.textContent = a.statusLabel;
+  st.className = 'ar-status ' + a.status;
+  document.getElementById('pv-words').textContent = a.words + ' 字';
+  document.getElementById('pv-date').textContent = '最后编辑：' + a.date;
+  document.getElementById('pv-body').innerHTML = a.body;
+  var tagsHtml = a.tags.map(function(t){return '<span class="ar-tag">'+t+'</span>'}).join('');
+  document.querySelector('.preview-tags').innerHTML = tagsHtml;
+}
+
+function filterStatus(btn, status) {
+  document.querySelectorAll('.filters button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  document.querySelectorAll('.art-row').forEach(function(row, i) {
+    if (status === 'all') { row.style.display = ''; return; }
+    row.style.display = articles[i].status === status ? '' : 'none';
+  });
+}
+
+function toggleTag(el) {
+  el.classList.toggle('on');
+}
+
+function showToast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2000);
+}
+
+// Sidebar toggle
+function toggleSidebar() { document.querySelector('.side').classList.toggle('collapsed'); }
+
+// Quick Capture Modal
+function openCapture() {
+  document.getElementById('capture-modal').classList.add('open');
+  setTimeout(() => document.getElementById('capture-text').focus(), 100);
+}
+function closeCapture() { document.getElementById('capture-modal').classList.remove('open'); }
+function saveCapture() {
+  const text = document.getElementById('capture-text').value.trim();
+  if (text) { document.getElementById('capture-text').value = ''; closeCapture(); showToast('已保存碎片'); }
+}
+
+// Settings Modal
+function openSettings() { document.getElementById('settings-modal').classList.add('open'); }
+function closeSettings() { document.getElementById('settings-modal').classList.remove('open'); }
+document.getElementById('settings-nav').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-tab]');
+  if (!btn) return;
+  document.querySelectorAll('#settings-nav button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const tabs = { account: `<h4>账户</h4><div class="field"><label>用户名</label><input type="text" value="Alex Chen"/></div>`, ai: `<h4>AI 模型</h4><div class="field"><label>默认模型</label><select><option>Claude 4 Opus</option><option>GPT-4o</option></select></div>`, shortcuts: `<h4>快捷键</h4><div class="field"><label>快速记录</label><input type="text" value="⌘ ⇧ Space" readonly/></div>`, knowledge: `<h4>知识库</h4><div class="field"><label>碎片总数</label><input type="text" value="1,247 条" disabled/></div>`, plugins: `<h4>插件</h4><div class="field"><div class="hint">暂无已安装插件。</div></div>` };
+  document.getElementById('settings-content').innerHTML = tabs[btn.dataset.tab] || '';
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if ((e.metaKey||e.ctrlKey) && e.shiftKey && e.code === 'Space') { e.preventDefault(); openCapture(); }
+  if (e.key === 'Escape') { closeCapture(); closeSettings(); }
+  if ((e.metaKey||e.ctrlKey) && e.key === 'Enter' && document.getElementById('capture-modal').classList.contains('open')) { e.preventDefault(); saveCapture(); }
+});
+</script>
+
+  </div><!-- /.win-body -->
+
+<!-- Status Bar -->
+<footer class="status-bar">
+  <div class="seg"><span class="dot-live"></span> Curator Agent</div>
+  <div class="seg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>聚类中… 3 条新碎片</div>
+  <span class="spacer"></span>
+  <div class="seg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>知识库 1,247 条</div>
+  <div class="seg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="20 6 9 17 4 12"/></svg>已同步</div>
+  <div class="seg settings" onclick="openSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.6.84 1.02 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>设置</div>
+</footer>
+
+<!-- Quick Capture Modal -->
+<div class="modal-overlay" id="capture-modal" onclick="if(event.target===this)closeCapture()">
+  <div class="modal-panel"><div class="modal-head"><h3>快速记录</h3><button onclick="closeCapture()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div><div class="modal-body"><textarea id="capture-text" placeholder="记下你的想法…"></textarea></div><div class="modal-foot"><button class="btn-secondary" onclick="closeCapture()">取消</button><button class="btn-primary" onclick="saveCapture()">保存</button></div></div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal-panel settings-panel"><div class="modal-head"><h3>设置</h3><button onclick="closeSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div><div class="modal-body"><nav class="settings-nav" id="settings-nav"><button class="on" data-tab="account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>账户</button><button data-tab="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>AI 模型</button><button data-tab="shortcuts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h4M6 12h12M6 16h8"/></svg>快捷键</button><button data-tab="knowledge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>知识库</button><button data-tab="plugins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>插件</button></nav><div class="settings-content" id="settings-content"><h4>账户</h4><div class="field"><label>用户名</label><input type="text" value="Alex Chen"/></div></div></div></div>
+</div>
+
+</body>
+</html>

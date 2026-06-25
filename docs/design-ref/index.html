@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Cognest — AI 认知工作台</title>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/app.css"/>
+<style>
+body { background: var(--bg); display: grid; place-items: center; min-height: 100vh; padding: 48px 24px; }
+.launcher { max-width: 640px; width: 100%; }
+.launcher-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 32px; }
+.launcher-brand .mark { width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(160deg, #1d1d1f, #3a3a3c); display: grid; place-items: center; }
+.launcher-brand .mark svg { width: 22px; height: 22px; color: #fff; }
+.launcher-brand h1 { font: 600 var(--text-2xl)/1 var(--font-display); letter-spacing: var(--tracking-display); }
+.launcher-desc { color: var(--muted); font-size: var(--text-base); line-height: 1.6; margin-bottom: 36px; max-width: 52ch; }
+.launcher-grid { display: grid; gap: 14px; }
+.launcher-card {
+  display: flex; align-items: flex-start; gap: 16px;
+  padding: 20px 22px; border: 1px solid var(--border);
+  border-radius: var(--radius-lg); text-decoration: none; color: var(--fg);
+  transition: box-shadow var(--motion-base) var(--ease-standard), border-color var(--motion-fast);
+}
+.launcher-card:hover { box-shadow: var(--elev-raised); border-color: var(--accent); }
+.launcher-card .lc-icon {
+  width: 40px; height: 40px; border-radius: var(--radius-md);
+  background: var(--surface); display: grid; place-items: center; flex: 0 0 auto;
+}
+.launcher-card .lc-icon svg { width: 20px; height: 20px; color: var(--accent); }
+.launcher-card .lc-body { flex: 1; }
+.launcher-card .lc-title { font: 600 var(--text-lg)/1.2 var(--font-display); margin-bottom: 6px; }
+.launcher-card .lc-desc { font-size: var(--text-sm); color: var(--muted); line-height: 1.5; }
+.launcher-footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid var(--border-soft); font-size: var(--text-xs); color: var(--meta); }
+.launcher-footer a { color: var(--accent); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="launcher">
+  <div class="launcher-brand">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+    <h1>Cognest</h1>
+  </div>
+  <p class="launcher-desc">AI 认知工作台 — 帮助你将碎片化灵感逐渐演化为系统化认知。人在两端，AI 在中间。</p>
+
+  <div class="launcher-grid">
+    <a href="discover.html" class="launcher-card">
+      <div class="lc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div>
+      <div class="lc-body">
+        <div class="lc-title">发现</div>
+        <div class="lc-desc">AI 主动推送发现：本周回顾、成长中的 Topic、新关联。支持按需生成视图（知识图谱、趋势、阅读清单）。</div>
+      </div>
+    </a>
+    <a href="compose.html" class="launcher-card">
+      <div class="lc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></div>
+      <div class="lc-body">
+        <div class="lc-title">创作</div>
+        <div class="lc-desc">文件列表 + Markdown 编辑器 + AI 对话面板。写作时自动浮出相关碎片，支持沉浸模式。</div>
+      </div>
+    </a>
+    <a href="capture.html" class="launcher-card">
+      <div class="lc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16v16H4z"/><path d="M9 9h6M9 13h4"/></svg></div>
+      <div class="lc-body">
+        <div class="lc-title">碎片</div>
+        <div class="lc-desc">Inbox 时间流，按日分组。零摩擦录入，AI 自动分类和关联。支持全局快捷键 ⌘⇧Space。</div>
+      </div>
+    </a>
+    <a href="articles.html" class="launcher-card">
+      <div class="lc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h12"/></svg></div>
+      <div class="lc-body">
+        <div class="lc-title">文章</div>
+        <div class="lc-desc">全部文章管理：分类标签、状态追踪（草稿/修改中/已完成）、搜索筛选、预览、跳转创作。</div>
+      </div>
+    </a>
+  </div>
+
+  <div class="launcher-footer">
+    Cognest v4.0 原型 · 组织原则：人在两端，AI 在中间 · <a href="prd.md">查看 PRD</a>
+  </div>
+</div>
+</body>
+</html>

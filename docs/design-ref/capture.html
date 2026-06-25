@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Cognest — 碎片</title>
+<link rel="stylesheet" href="assets/tokens.css"/>
+<link rel="stylesheet" href="assets/app.css"/>
+<style>
+/* ── Capture-specific styles ───────────────── */
+.inbox { max-width: 680px; margin: 0 auto; padding: 38px 40px 80px; }
+
+.inbox-head { margin-bottom: 24px; }
+.inbox-head h1 { font: 600 var(--text-2xl)/1.05 var(--font-display); letter-spacing: var(--tracking-display); }
+.inbox-head p { color: var(--muted); font-size: var(--text-base); margin-top: 8px; }
+
+/* Quick input */
+.quick-input {
+  display: flex; gap: 10px; margin-bottom: 32px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 6px 6px 6px 16px;
+  transition: border-color var(--motion-fast), box-shadow var(--motion-fast);
+}
+.quick-input:focus-within { border-color: var(--accent); box-shadow: var(--focus-ring); }
+.quick-input input {
+  flex: 1; border: 0; background: none; outline: none;
+  font: var(--text-base)/1.4 var(--font-body); color: var(--fg); padding: 8px 0;
+}
+.quick-input input::placeholder { color: var(--meta); }
+.quick-input button { padding: 9px 16px; }
+
+/* Filter bar */
+.filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 20px; }
+.filter-bar .chip {
+  font-size: var(--text-sm); color: var(--fg-2); padding: 6px 12px;
+  border: 1px solid var(--border-soft); border-radius: var(--radius-pill);
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+}
+.filter-bar .chip:hover { border-color: var(--meta); background: var(--bg); }
+.filter-bar .chip.active { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.filter-bar .count { margin-left: auto; font-size: var(--text-sm); color: var(--meta); }
+
+/* Day group */
+.day-group { margin-bottom: 28px; }
+.day-label {
+  font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.06em;
+  color: var(--meta); text-transform: uppercase; margin-bottom: 10px;
+  padding-bottom: 8px; border-bottom: 1px solid var(--border-soft);
+}
+
+/* Fragment item */
+.frag {
+  padding: 14px 16px; border-radius: var(--radius-md);
+  border: 1px solid transparent; margin-bottom: 6px;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+  position: relative;
+}
+.frag:hover { background: var(--surface); border-color: var(--border-soft); }
+.frag .frag-content { font-size: var(--text-base); line-height: 1.6; color: var(--fg); margin-bottom: 8px; }
+.frag .frag-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.frag .frag-time { font-size: var(--text-xs); color: var(--meta); }
+.frag .frag-tag {
+  font-size: 11px; font-weight: 500; color: var(--accent);
+  background: color-mix(in oklab, var(--accent), transparent 90%);
+  padding: 3px 8px; border-radius: var(--radius-pill);
+}
+.frag .frag-tag.topic { color: var(--success); background: color-mix(in oklab, var(--success), transparent 88%); }
+.frag .frag-check {
+  position: absolute; top: 14px; right: 14px;
+  width: 18px; height: 18px; color: var(--success); opacity: 0.7;
+}
+.frag .frag-actions {
+  position: absolute; top: 12px; right: 12px;
+  display: none; gap: 4px;
+}
+.frag:hover .frag-actions { display: flex; }
+.frag:hover .frag-check { display: none; }
+.frag .frag-actions button {
+  width: 26px; height: 26px; border-radius: var(--radius-sm);
+  display: grid; place-items: center; color: var(--meta);
+  transition: background var(--motion-fast), color var(--motion-fast);
+}
+.frag .frag-actions button:hover { background: var(--bg); color: var(--fg-2); }
+.frag .frag-actions button svg { width: 14px; height: 14px; }
+
+/* Empty state */
+.empty-state {
+  text-align: center; padding: 80px 20px; color: var(--muted);
+}
+.empty-state svg { width: 48px; height: 48px; color: var(--border); margin-bottom: 16px; }
+.empty-state p { font-size: var(--text-base); margin-bottom: 8px; }
+.empty-state kbd { font: 500 12px/1 var(--font-mono); color: var(--fg-2); background: var(--surface); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; padding: 4px 8px; }
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="win-body">
+  <!-- Sidebar -->
+  <aside class="side">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="brand">
+      <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg></div>
+      <b>Cognest</b>
+      <button class="side-toggle" onclick="toggleSidebar()" title="收起侧边栏"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M15 18l-6-6 6-6"/></svg></button>
+    </div>
+    <button class="capture-btn" onclick="openCapture()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 5v14M5 12h14"/></svg>
+      <span class="t">快速记录</span>
+      <kbd>⌘⇧Space</kbd>
+    </button>
+    <nav class="nav">
+      <div class="lbl">空间</div>
+      <a href="discover.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>发现</a>
+      <a href="compose.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>创作<span class="cnt">3</span></a>
+      <a href="capture.html" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16v16H4z"/><path d="M9 9h6M9 13h4"/></svg>碎片<span class="cnt">142</span></a>
+      <a href="articles.html"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 6h16M4 12h16M4 18h12"/></svg>文章<span class="cnt">7</span></a>
+    </nav>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <div class="inbox">
+      <div class="inbox-head">
+        <h1>碎片</h1>
+        <p>你的所有原始想法。记录即完成，AI 会帮你整理。</p>
+      </div>
+
+      <!-- Quick input -->
+      <div class="quick-input">
+        <input type="text" id="quick-in" placeholder="写下你的想法…" onkeydown="if(event.key==='Enter')addFragment()"/>
+        <button class="btn-primary" onclick="addFragment()">记录</button>
+      </div>
+
+      <!-- Filter -->
+      <div class="filter-bar">
+        <button class="chip active">全部</button>
+        <button class="chip" onclick="showToast('筛选：未整理')">未整理</button>
+        <button class="chip" onclick="showToast('筛选：已归类')">已归类</button>
+        <span class="count">共 142 条</span>
+      </div>
+
+      <!-- Day groups -->
+      <div id="frag-list">
+        <div class="day-group">
+          <div class="day-label">今天 · 6月24日</div>
+          <div class="frag">
+            <div class="frag-content">MCP 本质上是一个 USB-C 协议——标准化了外设的发现和注册</div>
+            <div class="frag-meta">
+              <span class="frag-time">10:32</span>
+              <span class="frag-tag">MCP</span>
+              <span class="frag-tag topic">Agent 架构</span>
+            </div>
+            <svg class="frag-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            <div class="frag-actions">
+              <button title="引用到创作" onclick="showToast('已复制到创作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+              <button title="查看关联" onclick="showToast('查看关联')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><path d="M8.6 10.5l6.3-3"/></svg></button>
+            </div>
+          </div>
+          <div class="frag">
+            <div class="frag-content">知识管理软件的核心不是「管理」，是让知识自己生长</div>
+            <div class="frag-meta">
+              <span class="frag-time">08:15</span>
+              <span class="frag-tag topic">产品设计</span>
+            </div>
+            <svg class="frag-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            <div class="frag-actions">
+              <button title="引用到创作" onclick="showToast('已复制到创作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+              <button title="查看关联" onclick="showToast('查看关联')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><path d="M8.6 10.5l6.3-3"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="day-group">
+          <div class="day-label">昨天 · 6月23日</div>
+          <div class="frag">
+            <div class="frag-content">Agent 的 Memory 本质上是一个持续演化的 context window</div>
+            <div class="frag-meta">
+              <span class="frag-time">22:15</span>
+              <span class="frag-tag">Agent Memory</span>
+              <span class="frag-tag topic">Agent 架构</span>
+            </div>
+            <svg class="frag-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            <div class="frag-actions">
+              <button title="引用到创作" onclick="showToast('已复制到创作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+              <button title="查看关联" onclick="showToast('查看关联')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><path d="M8.6 10.5l6.3-3"/></svg></button>
+            </div>
+          </div>
+          <div class="frag">
+            <div class="frag-content">产品设计的第一性原则：用户的认知负担最小化</div>
+            <div class="frag-meta">
+              <span class="frag-time">14:08</span>
+              <span class="frag-tag topic">产品设计</span>
+            </div>
+            <svg class="frag-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            <div class="frag-actions">
+              <button title="引用到创作" onclick="showToast('已复制到创作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+              <button title="查看关联" onclick="showToast('查看关联')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><path d="M8.6 10.5l6.3-3"/></svg></button>
+            </div>
+          </div>
+          <div class="frag">
+            <div class="frag-content">Context Engineering 的核心是让模型在对的时间看到对的信息</div>
+            <div class="frag-meta">
+              <span class="frag-time">09:41</span>
+              <span class="frag-tag">Context Engineering</span>
+            </div>
+            <div class="frag-actions">
+              <button title="引用到创作" onclick="showToast('已复制到创作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+              <button title="查看关联" onclick="showToast('查看关联')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><path d="M8.6 10.5l6.3-3"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="day-group">
+          <div class="day-label">6月22日</div>
+          <div class="frag">
+            <div class="frag-content">双空间不对——应该是人在两端、AI 在中间</div>
+            <div class="frag-meta">
+              <span class="frag-time">16:55</span>
+              <span class="frag-tag topic">产品设计</span>
+            </div>
+            <svg class="frag-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            <div class="frag-actions">
+              <button title="引用到创作" onclick="showToast('已复制到创作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+              <button title="查看关联" onclick="showToast('查看关联')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><path d="M8.6 10.5l6.3-3"/></svg></button>
+            </div>
+          </div>
+          <div class="frag">
+            <div class="frag-content">RAG 的瓶颈不是检索精度，是检索到的上下文如何被模型有效利用</div>
+            <div class="frag-meta">
+              <span class="frag-time">11:23</span>
+              <span class="frag-tag">RAG</span>
+              <span class="frag-tag topic">Context Engineering</span>
+            </div>
+            <svg class="frag-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+            <div class="frag-actions">
+              <button title="引用到创作" onclick="showToast('已复制到创作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+              <button title="查看关联" onclick="showToast('查看关联')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><path d="M8.6 10.5l6.3-3"/></svg></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Add new fragment
+function addFragment() {
+  const input = document.getElementById('quick-in');
+  const text = input.value.trim();
+  if (!text) return;
+
+  const list = document.getElementById('frag-list');
+  const todayGroup = list.querySelector('.day-group');
+  const now = new Date();
+  const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+
+  const frag = document.createElement('div');
+  frag.className = 'frag';
+  frag.style.opacity = '0'; frag.style.transform = 'translateY(-8px)';
+  frag.innerHTML = `
+    <div class="frag-content">${text}</div>
+    <div class="frag-meta">
+      <span class="frag-time">${time}</span>
+      <span class="frag-tag">新碎片</span>
+    </div>
+    <div class="frag-actions">
+      <button title="引用到创作" onclick="showToast('已复制到创作')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg></button>
+      <button title="查看关联" onclick="showToast('查看关联')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="12" r="3"/><circle cx="18" cy="6" r="3"/><path d="M8.6 10.5l6.3-3"/></svg></button>
+    </div>`;
+
+  todayGroup.insertBefore(frag, todayGroup.querySelector('.frag'));
+  requestAnimationFrame(() => { frag.style.transition = 'opacity 0.3s, transform 0.3s'; frag.style.opacity = '1'; frag.style.transform = 'translateY(0)'; });
+
+  input.value = '';
+  showToast('已记录');
+}
+
+// Toast
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2000);
+}
+
+// Sidebar toggle
+function toggleSidebar() { document.querySelector('.side').classList.toggle('collapsed'); }
+
+// Quick Capture Modal
+function openCapture() {
+  document.getElementById('capture-modal').classList.add('open');
+  setTimeout(() => document.getElementById('capture-text').focus(), 100);
+}
+function closeCapture() { document.getElementById('capture-modal').classList.remove('open'); }
+function saveCapture() {
+  const text = document.getElementById('capture-text').value.trim();
+  if (text) { document.getElementById('capture-text').value = ''; closeCapture(); showToast('已保存碎片'); }
+}
+
+// Settings Modal
+function openSettings() { document.getElementById('settings-modal').classList.add('open'); }
+function closeSettings() { document.getElementById('settings-modal').classList.remove('open'); }
+document.getElementById('settings-nav').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-tab]');
+  if (!btn) return;
+  document.querySelectorAll('#settings-nav button').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  const tabs = { account: `<h4>账户</h4><div class="field"><label>用户名</label><input type="text" value="Alex Chen"/></div>`, ai: `<h4>AI 模型</h4><div class="field"><label>默认模型</label><select><option>Claude 4 Opus</option><option>GPT-4o</option></select></div>`, shortcuts: `<h4>快捷键</h4><div class="field"><label>快速记录</label><input type="text" value="⌘ ⇧ Space" readonly/></div>`, knowledge: `<h4>知识库</h4><div class="field"><label>碎片总数</label><input type="text" value="1,247 条" disabled/></div>`, plugins: `<h4>插件</h4><div class="field"><div class="hint">暂无已安装插件。</div></div>` };
+  document.getElementById('settings-content').innerHTML = tabs[btn.dataset.tab] || '';
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if ((e.metaKey||e.ctrlKey) && e.shiftKey && e.code === 'Space') { e.preventDefault(); openCapture(); }
+  if (e.key === 'Escape') { closeCapture(); closeSettings(); }
+  if ((e.metaKey||e.ctrlKey) && e.key === 'Enter' && document.getElementById('capture-modal').classList.contains('open')) { e.preventDefault(); saveCapture(); }
+});
+</script>
+
+  </div><!-- /.win-body -->
+
+<!-- Status Bar -->
+<footer class="status-bar">
+  <div class="seg"><span class="dot-live"></span> Curator Agent</div>
+  <div class="seg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83"/></svg>聚类中… 3 条新碎片</div>
+  <span class="spacer"></span>
+  <div class="seg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>知识库 1,247 条</div>
+  <div class="seg"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="20 6 9 17 4 12"/></svg>已同步</div>
+  <div class="seg settings" onclick="openSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9c.26.6.84 1.02 1.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>设置</div>
+</footer>
+
+<!-- Quick Capture Modal -->
+<div class="modal-overlay" id="capture-modal" onclick="if(event.target===this)closeCapture()">
+  <div class="modal-panel"><div class="modal-head"><h3>快速记录</h3><button onclick="closeCapture()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div><div class="modal-body"><textarea id="capture-text" placeholder="记下你的想法…"></textarea></div><div class="modal-foot"><button class="btn-secondary" onclick="closeCapture()">取消</button><button class="btn-primary" onclick="saveCapture()">保存</button></div></div>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal-panel settings-panel"><div class="modal-head"><h3>设置</h3><button onclick="closeSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div><div class="modal-body"><nav class="settings-nav" id="settings-nav"><button class="on" data-tab="account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>账户</button><button data-tab="ai"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4"/></svg>AI 模型</button><button data-tab="shortcuts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M6 8h.01M10 8h4M6 12h12M6 16h8"/></svg>快捷键</button><button data-tab="knowledge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>知识库</button><button data-tab="plugins"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>插件</button></nav><div class="settings-content" id="settings-content"><h4>账户</h4><div class="field"><label>用户名</label><input type="text" value="Alex Chen"/></div></div></div></div>
+</div>
+
+</body>
+</html>
