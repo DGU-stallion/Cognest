@@ -1,25 +1,31 @@
-# Dependencies
-node_modules/
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Build output
-target/
-dist/
+node_modules
+dist
+dist-ssr
+*.local
 
-# Cognest local cache (disposable, rebuilt from files)
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Cognest data (derivable index, not source of truth)
 .cognest/
 *.sqlite
-vectors.bin
 
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Environment
-.env
-.env.local
+# Rust build artifacts
+target/
