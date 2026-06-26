@@ -10,6 +10,19 @@
 - **文件系统为唯一事实来源**，SQLite 为可丢弃派生索引
 - **渐进式启动**：先渲染壳，后台异步加载数据
 
+### ⚠️ 重要实现约束（AI 必读）
+
+1. **Tauri v2 无 tokio runtime**：`setup()` 和 IPC 命令层运行在主线程，严禁 `tokio::spawn`。后台任务用 `std::thread::spawn`。
+
+2. **IPC 数据契约 — 列表 vs 详情**：
+   - `list_articles` → `Vec<ArticleRecord>`（索引记录，**无 content/word_count 字段**）
+   - `get_article` → `ArticleResponse`（完整记录，含正文）
+   - 前端 store 接收 `ArticleRecord` 后必须规范化（补默认值、status 映射 `completed`→`done`）
+
+3. **写文件后立即同步索引**：`create_article`/`save_article` 写完 `.md` 文件后立即 `INSERT OR REPLACE` 到 IndexDb，不等 File Watcher 异步检测。
+
+4. **碎片可编辑**（Phase 1.5 变更）：碎片正文不再 immutable，通过 `update_fragment` IPC 允许编辑。
+
 ## Architecture
 
 ### 系统分层架构
@@ -303,10 +316,14 @@ pub enum FragmentFilter {
 
 #### watcher.rs — 文件监听
 
+> **⚠️ 实现约束：** Tauri v2 的 `setup()` 不在 tokio runtime 内。
+> File Watcher 后台任务必须用 `std::thread::spawn` + `std::sync::mpsc::Receiver::recv_timeout`，
+> **严禁使用 `tokio::spawn`、`tokio::sync::mpsc`、`tokio::time::sleep`**，否则会 panic。
+
 ```rust
 use notify::{Watcher, RecursiveMode};
-use tokio::sync::mpsc;
-use std::time::Duration;
+use std::sync::{mpsc, Arc, Mutex};   // std channel
+use std::time::{Duration, Instant};
 
 /// 文件变更事件
 #[derive(Debug, Clone)]
@@ -316,25 +333,20 @@ pub enum FileEvent {
     Deleted(PathBuf),
 }
 
-/// 文件监听器
-pub struct FileWatcher {
-    debounce_ms: u64,  // 500ms 去抖
+/// 启动文件监听器（在 std thread 中运行 debounce loop）
+pub fn start_watcher(
+    vault_path: PathBuf,
+    index: Arc<Mutex<IndexDb>>,
+    app_handle: tauri::AppHandle,
+) -> Result<WatcherHandle, WatcherError>;
+
+/// 持有此 handle 保持监听器运行，drop 则停止
+pub struct WatcherHandle {
+    _watcher: notify::RecommendedWatcher,
+    _thread_handle: std::thread::JoinHandle<()>,  // NOT tokio task
 }
 
-impl FileWatcher {
-    pub fn new(debounce_ms: u64) -> Self;
-    
-    /// 启动监听，返回事件接收通道
-    /// 递归监听 capture/ 和 articles/ 目录下的 .md 文件
-    pub async fn start(
-        &self,
-        vault_path: &Path,
-        tx: mpsc::Sender<Vec<FileEvent>>,
-    ) -> Result<(), WatcherError>;
-    
-    /// 停止监听
-    pub async fn stop(&mut self) -> Result<(), WatcherError>;
-}
+// 内部 debounce 实现：rx.recv_timeout(500ms) 轮询，无需 tokio runtime
 ```
 
 #### git.rs — Git 操作
@@ -413,6 +425,14 @@ async fn search_articles(query: String, state: State<'_, AppState>) -> Result<Ve
 
 #[tauri::command]
 async fn list_articles(filter: String, tags: Vec<String>, state: State<'_, AppState>) -> Result<Vec<ArticleRecord>, String>;
+
+// ⚠️ 重要：list_articles 返回 ArticleRecord（索引记录），不含正文(content)和字数(word_count)
+// get_article 返回 ArticleResponse，含完整正文和元数据
+// 前端 store 的 loadArticles() 必须在接收 ArticleRecord 后做规范化映射：
+//   - content: r.content ?? ''
+//   - word_count: r.word_count ?? 0
+//   - status: "completed" → "done"（后端与前端枚举值不同）
+// 参见 src/stores/articlesStore.ts 的 RawArticleRecord + normalizeStatus()
 
 #[tauri::command]
 async fn git_sync(state: State<'_, AppState>) -> Result<SyncResult, String>;
@@ -712,6 +732,11 @@ interface SyncStatus {
 **Validates: Requirements 3.1, 3.2**
 
 ### Property 3: 碎片正文保持不变量
+
+> **⚠️ 实现变更（Phase 1.5）：** PRD 原设计为碎片 immutable（append-only）。
+> 实际产品决策改为**允许编辑碎片正文**（用户反馈需要）。
+> 前端通过 `update_fragment` IPC 命令调用 `FileRepo::update_fragment_content()` 更新正文，保留 frontmatter。
+> Property 3 的不变量测试已不适用，但 round-trip 属性（Property 1, 2）仍有效。
 
 *For any* 碎片正文内容，创建碎片文件后读取该文件，Frontmatter 结束标记 `---` 之后的正文应与原始输入完全一致（字节级相等），且经过任何后续 Frontmatter 字段更新操作后正文仍保持不变。
 

@@ -133,6 +133,48 @@
   min-width: 0;
 }
 
+/* Title bar above toolbar */
+.compose-title-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px 8px;
+  flex: 0 0 auto;
+}
+.compose-title-bar .doc-title {
+  flex: 1;
+  font: 600 var(--text-2xl)/1.1 var(--font-display);
+  letter-spacing: var(--tracking-display);
+  border: none;
+  outline: none;
+  color: var(--fg);
+  background: transparent;
+}
+.compose-title-bar .doc-title::placeholder {
+  color: var(--border);
+}
+.compose-title-bar .status {
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  cursor: pointer;
+  transition: opacity var(--motion-fast);
+  user-select: none;
+  flex-shrink: 0;
+}
+.compose-title-bar .status:hover {
+  opacity: 0.8;
+}
+.compose-title-bar .status.draft {
+  color: #92400e;
+  background: color-mix(in oklab, var(--warn), transparent 85%);
+}
+.compose-title-bar .status.archived {
+  color: #166534;
+  background: color-mix(in oklab, var(--success), transparent 85%);
+}
+
 .editor-toolbar {
   display: flex;
   align-items: center;
@@ -235,11 +277,7 @@
   color: #92400e;
   background: color-mix(in oklab, var(--warn), transparent 85%);
 }
-.doc-meta .status.editing {
-  color: #1d4ed8;
-  background: color-mix(in oklab, #3b82f6, transparent 85%);
-}
-.doc-meta .status.completed {
+.doc-meta .status.archived {
   color: #166534;
   background: color-mix(in oklab, var(--success), transparent 85%);
 }
@@ -336,4 +374,32 @@
 .editor-toolbar .new-article-btn svg {
   width: 14px;
   height: 14px;
+}
+
+/* ── Resize handle ─────────────────────────────────────── */
+.compose-shell > .resize-handle {
+  width: 6px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  align-self: stretch;
+  position: relative;
+  background: transparent;
+  transition: background 150ms;
+  z-index: 10;
+}
+.compose-shell > .resize-handle:hover,
+.compose-shell > .resize-handle:active {
+  background: var(--accent);
+  opacity: 0.5;
+}
+.compose-shell.immersive > .resize-handle {
+  display: none;
+}
+
+/* Override fixed widths when using resizable panels */
+.compose-shell > .ref-panel {
+  width: auto; /* overridden by inline style */
+}
+.compose-shell > .ai-side {
+  width: auto; /* overridden by inline style */
 }

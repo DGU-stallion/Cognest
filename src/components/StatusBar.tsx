@@ -105,15 +105,31 @@ export default function StatusBar({ onSettingsClick }: StatusBarProps) {
           知识库 {totalCount} 条
         </span>
 
-        {/* Git sync status */}
-        <span className={`status-bar-git ${gitStatus.status === 'no-remote' ? 'no-remote' : gitStatus.status}`}>
+        {/* Git sync status — click to sync if unsynced */}
+        <button
+          className={`status-bar-git ${gitStatus.status === 'no-remote' ? 'no-remote' : gitStatus.status}`}
+          onClick={async () => {
+            if (gitStatus.status === 'unsynced') {
+              setTaskText('同步中…');
+              try {
+                await invoke('git_sync');
+                setTaskText('');
+                fetchGitStatus();
+              } catch {
+                setTaskText('');
+              }
+            }
+          }}
+          title={gitStatus.status === 'unsynced' ? '点击同步到 GitHub' : ''}
+          style={{ cursor: gitStatus.status === 'unsynced' ? 'pointer' : 'default' }}
+        >
           <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="9" cy="4" r="2" />
             <circle cx="9" cy="14" r="2" />
             <path d="M9 6v6" />
           </svg>
           {gitLabel}
-        </span>
+        </button>
 
         {/* Settings button */}
         <button

@@ -127,6 +127,7 @@ impl FileRepo {
     /// Read a fragment by ID. Returns (metadata, body content).
     ///
     /// Searches recursively under `capture/` for a file named `<id>.md`.
+    #[allow(dead_code)]
     pub fn read_fragment(&self, id: &str) -> Result<(FragmentMeta, String), RepoError> {
         let file_path = self.find_fragment_path(id)?;
         let content = std::fs::read_to_string(&file_path)?;

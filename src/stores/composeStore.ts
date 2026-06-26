@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { Fragment } from './captureStore';
 
-export type ArticleStatus = 'draft' | 'editing' | 'completed';
+export type ArticleStatus = 'draft' | 'archived';
 
 export interface ArticleMeta {
   id: string;
@@ -45,7 +45,19 @@ export interface ComposeState {
   createNewArticle: () => Promise<void>;
 }
 
-const STATUS_CYCLE: ArticleStatus[] = ['draft', 'editing', 'completed'];
+const STATUS_CYCLE: ArticleStatus[] = ['draft', 'archived'];
+
+function normalizeStatus(status?: string): ArticleStatus {
+  switch (status) {
+    case 'completed':
+    case 'done':
+    case 'archived':
+      return 'archived';
+    case 'draft':
+    default:
+      return 'draft';
+  }
+}
 
 export const useComposeStore = create<ComposeState>((set, get) => ({
   currentArticleId: null,
@@ -90,7 +102,7 @@ export const useComposeStore = create<ComposeState>((set, get) => ({
       const article = await invoke<ArticleResponse>('get_article', { id });
       set({
         title: article.title,
-        status: article.status as ArticleStatus,
+        status: normalizeStatus(article.status),
         wordCount: 0,
         updatedAt: article.updated,
         bodyContent: article.body,

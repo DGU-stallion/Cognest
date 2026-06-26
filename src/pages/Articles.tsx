@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useArticlesStore } from '../stores/articlesStore';
 import { useComposeStore } from '../stores/composeStore';
@@ -9,122 +9,132 @@ import './Articles.css';
 const STATUS_OPTIONS: { key: ArticleStatus | 'all'; label: string }[] = [
   { key: 'all', label: '全部' },
   { key: 'draft', label: '草稿' },
-  { key: 'editing', label: '修改中' },
-  { key: 'done', label: '已完成' },
+  { key: 'archived', label: '已归档' },
 ];
 
 const STATUS_LABELS: Record<ArticleStatus, string> = {
   draft: '草稿',
-  editing: '修改中',
-  done: '已完成',
+  archived: '已归档',
 };
 
-/** Format word count with thousands separator */
 function formatWordCount(count: number): string {
-  return count.toLocaleString('zh-CN');
+  return (count ?? 0).toLocaleString('zh-CN');
 }
 
-/** Format date for article list row */
 function formatDate(isoStr: string): string {
+  if (!isoStr) return '';
   const date = new Date(isoStr);
   const now = new Date();
-  const toDateKey = (d: Date) =>
+  const toKey = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-  const todayKey = toDateKey(now);
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayKey = toDateKey(yesterday);
-  const dateKey = toDateKey(date);
-
-  if (dateKey === todayKey) return '今天';
-  if (dateKey === yesterdayKey) return '昨天';
+  const todayKey = toKey(now);
+  const yday = new Date(now); yday.setDate(yday.getDate() - 1);
+  const key = toKey(date);
+  if (key === todayKey) return '今天';
+  if (key === toKey(yday)) return '昨天';
   return `${date.getMonth() + 1}月${date.getDate()}日`;
 }
 
-/** Format date with time for preview panel */
 function formatDateTime(isoStr: string): string {
-  const date = new Date(isoStr);
-  const hours = String(date.getHours()).padStart(2, '0');
-  const minutes = String(date.getMinutes()).padStart(2, '0');
-  return `最后编辑：${formatDate(isoStr)} ${hours}:${minutes}`;
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  return `最后编辑：${formatDate(isoStr)} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
-/** Extract all unique tags from articles */
 function extractAllTags(articles: Article[]): string[] {
-  const tagSet = new Set<string>();
-  for (const article of articles) {
-    for (const tag of article.tags) {
-      tagSet.add(tag);
-    }
-  }
-  return [...tagSet];
+  const s = new Set<string>();
+  articles.forEach(a => a.tags.forEach(t => s.add(t)));
+  return [...s];
 }
 
-/** Get excerpt: first 50 characters of content (strip markdown) */
 function getExcerpt(content: string): string {
-  // Strip markdown syntax for cleaner excerpt
+  if (!content) return '';
   const plain = content
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/[*_~`>]/g, '')
     .replace(/\n+/g, ' ')
     .trim();
-  return plain.length > 50 ? plain.slice(0, 50) + '…' : plain;
+  return plain.length > 60 ? plain.slice(0, 60) + '…' : plain;
 }
+
+// ─── Resizable handle hook (fixed closure bug) ────────────────────────────────
+
+function useResizable(initialWidth: number, min: number, max: number) {
+  const [width, setWidth] = useState(initialWidth);
+  const widthRef = useRef(initialWidth);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startW = useRef(initialWidth);
+
+  // Keep ref in sync
+  useEffect(() => { widthRef.current = width; }, [width]);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    startX.current = e.clientX;
+    startW.current = widthRef.current;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = ev.clientX - startX.current;
+      const newWidth = Math.min(max, Math.max(min, startW.current + delta));
+      setWidth(newWidth);
+    };
+    const onUp = () => {
+      dragging.current = false;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [min, max]);
+
+  return { width, onMouseDown };
+}
+
+// ─── Main component ────────────────────────────────────────────────────────────
 
 export default function Articles() {
   const {
-    articles,
-    selectedId,
-    statusFilter,
-    tagFilter,
-    searchQuery,
-    loading,
-    loadArticles,
-    setStatusFilter,
-    toggleTag,
-    setSearchQuery,
-    selectArticle,
-    deleteArticle,
+    articles, selectedId, selectedArticleContent, statusFilter, tagFilter, searchQuery, loading,
+    loadArticles, setStatusFilter, toggleTag, setSearchQuery, selectArticle, deleteArticle,
   } = useArticlesStore();
 
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const preview = useResizable(380, 240, 600);
 
-  useEffect(() => {
-    loadArticles();
-  }, [loadArticles]);
+  useEffect(() => { loadArticles(); }, [loadArticles]);
 
-  // Filter articles
   const filteredArticles = articles
-    .filter((a) => {
+    .filter(a => {
       if (statusFilter !== 'all' && a.status !== statusFilter) return false;
-      if (tagFilter.length > 0 && !tagFilter.every((t) => a.tags.includes(t))) return false;
+      if (tagFilter.length > 0 && !tagFilter.every(t => a.tags.includes(t))) return false;
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        if (!a.title.toLowerCase().includes(q) && !a.content.toLowerCase().includes(q)) return false;
+        if (!a.title.toLowerCase().includes(q) && !(a.content || '').toLowerCase().includes(q)) return false;
       }
       return true;
     })
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
-  const selectedArticle = articles.find((a) => a.id === selectedId) ?? null;
+  const selectedArticle = articles.find(a => a.id === selectedId) ?? null;
   const allTags = extractAllTags(articles);
 
-  const handleEdit = useCallback(() => {
-    if (!selectedArticle) return;
-    // Load article into compose store and switch to compose page
-    useComposeStore.getState().loadArticle(selectedArticle.id);
+  const handleOpenEdit = useCallback((articleId?: string) => {
+    const id = articleId ?? selectedArticle?.id;
+    if (!id) return;
+    useComposeStore.getState().loadArticle(id);
     useAppStore.getState().setCurrentPage('compose');
   }, [selectedArticle]);
 
-  const handleExport = useCallback(async () => {
-    if (!selectedArticle) return;
-    try {
-      await invoke('export_article', { id: selectedArticle.id });
-    } catch (e) {
-      console.error('Failed to export article:', e);
-    }
-  }, [selectedArticle]);
+  const handleExport = useCallback(async (id: string) => {
+    try { await invoke('export_article', { id }); } catch (e) { console.error(e); }
+  }, []);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!confirmDeleteId) return;
@@ -134,7 +144,7 @@ export default function Articles() {
 
   return (
     <div className="articles-shell">
-      {/* Left: list panel */}
+      {/* Left: list panel (flex:1, fills remaining space) */}
       <div className="art-list-panel">
         <div className="art-header">
           <h1>文章</h1>
@@ -144,10 +154,10 @@ export default function Articles() {
               type="text"
               placeholder="搜索文章标题或内容…"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={e => setSearchQuery(e.target.value)}
             />
             <div className="filters">
-              {STATUS_OPTIONS.map((opt) => (
+              {STATUS_OPTIONS.map(opt => (
                 <button
                   key={opt.key}
                   className={statusFilter === opt.key ? 'on' : ''}
@@ -160,10 +170,9 @@ export default function Articles() {
           </div>
         </div>
 
-        {/* Tag filter row */}
         {allTags.length > 0 && (
           <div className="tag-row">
-            {allTags.map((tag) => (
+            {allTags.map(tag => (
               <span
                 key={tag}
                 className={`tag-chip ${tagFilter.includes(tag) ? 'on' : ''}`}
@@ -175,7 +184,6 @@ export default function Articles() {
           </div>
         )}
 
-        {/* Article list */}
         <div className="art-list">
           {loading ? (
             <div className="art-empty">加载中…</div>
@@ -187,27 +195,34 @@ export default function Articles() {
               <p>暂无文章</p>
             </div>
           ) : (
-            filteredArticles.map((article) => (
+            filteredArticles.map(article => (
               <ArticleRow
                 key={article.id}
                 article={article}
                 selected={article.id === selectedId}
                 onSelect={() => selectArticle(article.id)}
+                onEdit={() => {
+                  handleOpenEdit(article.id);
+                }}
+                onExport={() => handleExport(article.id)}
+                onDelete={() => setConfirmDeleteId(article.id)}
               />
             ))
           )}
         </div>
       </div>
 
-      {/* Right: preview panel */}
-      <div className={`preview-panel ${!selectedArticle ? 'empty' : ''}`}>
+      {/* Resize handle between list and preview */}
+      <div className="resize-handle" onMouseDown={preview.onMouseDown} title="拖拽调整宽度" />
+
+      {/* Right: preview panel (resizable width) — clicking navigates to compose */}
+      <div
+        className={`preview-panel ${!selectedArticle ? 'empty' : ''}`}
+        style={{ width: preview.width, flexShrink: 0 }}
+        onClick={selectedArticle ? () => handleOpenEdit() : undefined}
+      >
         {selectedArticle ? (
-          <ArticlePreview
-            article={selectedArticle}
-            onEdit={handleEdit}
-            onExport={handleExport}
-            onDelete={() => setConfirmDeleteId(selectedArticle.id)}
-          />
+          <ArticlePreview article={selectedArticle} content={selectedArticleContent} />
         ) : (
           <div className="preview-empty">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -218,19 +233,15 @@ export default function Articles() {
         )}
       </div>
 
-      {/* Delete confirmation dialog */}
+      {/* Delete confirmation */}
       {confirmDeleteId && (
         <div className="confirm-overlay" onClick={() => setConfirmDeleteId(null)}>
-          <div className="confirm-dialog" onClick={(e) => e.stopPropagation()}>
+          <div className="confirm-dialog" onClick={e => e.stopPropagation()}>
             <h3>确认删除</h3>
             <p>确定要删除这篇文章吗？此操作不可撤销。</p>
             <div className="confirm-actions">
-              <button className="btn-secondary" onClick={() => setConfirmDeleteId(null)}>
-                取消
-              </button>
-              <button className="btn-danger" onClick={handleDeleteConfirm}>
-                删除
-              </button>
+              <button className="btn-secondary" onClick={() => setConfirmDeleteId(null)}>取消</button>
+              <button className="btn-danger" onClick={handleDeleteConfirm}>删除</button>
             </div>
           </div>
         </div>
@@ -239,159 +250,173 @@ export default function Articles() {
   );
 }
 
+// ─── ArticleRow with hover ⋯ menu ─────────────────────────────────────────────
+
 function ArticleRow({
-  article,
-  selected,
-  onSelect,
+  article, selected, onSelect, onEdit, onExport, onDelete,
 }: {
   article: Article;
   selected: boolean;
   onSelect: () => void;
+  onEdit: () => void;
+  onExport: () => void;
+  onDelete: () => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const menuRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  // Close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [menuOpen]);
+
+  const openMenu = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.right - 120 });
+    }
+    setMenuOpen(v => !v);
+  }, []);
+
   return (
-    <div className={`art-row ${selected ? 'selected' : ''}`} onClick={onSelect}>
+    <div
+      className={`art-row ${selected ? 'selected' : ''}`}
+      onClick={onSelect}
+      onDoubleClick={onEdit}
+      onContextMenu={e => { e.preventDefault(); setMenuPos({ top: e.clientY, left: e.clientX }); setMenuOpen(true); }}
+    >
       <div className="ar-main">
-        <div className="ar-title">{article.title}</div>
+        <div className="ar-title">{article.title || '无标题文章'}</div>
         <div className="ar-excerpt">{getExcerpt(article.content)}</div>
       </div>
       <div className="ar-meta">
         {article.tags.length > 0 && (
           <div className="ar-tags">
-            {article.tags.map((tag) => (
-              <span key={tag} className="ar-tag">
-                {tag}
-              </span>
-            ))}
+            {article.tags.map(tag => <span key={tag} className="ar-tag">{tag}</span>)}
           </div>
         )}
-        <span className={`ar-status ${article.status}`}>{STATUS_LABELS[article.status]}</span>
         <span className="ar-words">{formatWordCount(article.word_count)}</span>
         <span className="ar-date">{formatDate(article.updated_at)}</span>
+
+        {/* ⋯ more button — shown on hover */}
+        <div className="ar-more-wrap">
+          <button
+            ref={btnRef}
+            className="ar-more-btn"
+            title="更多操作"
+            onClick={openMenu}
+          >
+            <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="4.5" cy="9" r="1" fill="currentColor" />
+              <circle cx="9" cy="9" r="1" fill="currentColor" />
+              <circle cx="13.5" cy="9" r="1" fill="currentColor" />
+            </svg>
+          </button>
+          {menuOpen && (
+            <div
+              ref={menuRef}
+              className="ar-dropdown"
+              style={{ top: menuPos.top, left: menuPos.left }}
+              onClick={e => e.stopPropagation()}
+            >
+              <button onClick={() => { setMenuOpen(false); onEdit(); }}>
+                <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M9 15h6.75M12.375 2.625a1.59 1.59 0 0 1 2.25 2.25L5.25 14.25l-3 .75.75-3z" />
+                </svg>
+                编辑
+              </button>
+              <button onClick={() => { setMenuOpen(false); onExport(); }}>
+                <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M3 12v3h12v-3M9 3v9M6 9l3 3 3-3" />
+                </svg>
+                导出
+              </button>
+              <button className="danger" onClick={() => { setMenuOpen(false); onDelete(); }}>
+                <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <path d="M3 4.5h12M7.5 7.5v6M10.5 7.5v6M4.5 4.5l.75 9h7.5l.75-9" />
+                </svg>
+                删除
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
-function ArticlePreview({
-  article,
-  onEdit,
-  onExport,
-  onDelete,
-}: {
-  article: Article;
-  onEdit: () => void;
-  onExport: () => void;
-  onDelete: () => void;
-}) {
+// ─── Preview panel — clickable to open editor, shows fetched content ─────────
+
+function ArticlePreview({ article, content }: { article: Article; content: string }) {
   return (
-    <>
+    <div style={{ cursor: 'pointer' }}>
       <div className="preview-head">
-        <h2>{article.title}</h2>
+        <h2>{article.title || '无标题文章'}</h2>
         <div className="pm">
-          <span className={`ar-status ${article.status}`}>{STATUS_LABELS[article.status]}</span>
           <span>{formatWordCount(article.word_count)} 字</span>
           <span>{formatDateTime(article.updated_at)}</span>
         </div>
       </div>
-      <div className="preview-actions">
-        <button className="btn-primary" onClick={onEdit}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" width="14" height="14">
-            <path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
-          </svg>
-          编辑
-        </button>
-        <button className="btn-secondary" onClick={onExport}>
-          导出
-        </button>
-        <button className="btn-secondary btn-delete" onClick={onDelete}>
-          删除
-        </button>
-      </div>
       {article.tags.length > 0 && (
         <div className="preview-tags">
-          {article.tags.map((tag) => (
-            <span key={tag} className="ar-tag">
-              {tag}
-            </span>
-          ))}
+          {article.tags.map(tag => <span key={tag} className="ar-tag">{tag}</span>)}
         </div>
       )}
-      <div className="preview-body" dangerouslySetInnerHTML={{ __html: renderMarkdown(article.content) }} />
-    </>
+      <div className="preview-body" dangerouslySetInnerHTML={{ __html: content || '' }} />
+    </div>
   );
 }
 
-/** Simple markdown renderer — handles headers, paragraphs, blockquotes, bold, italic */
+// ─── Markdown renderer ────────────────────────────────────────────────────────
+
 function renderMarkdown(md: string): string {
+  if (!md) return '';
   const lines = md.split('\n');
   let html = '';
   let inBlockquote = false;
 
   for (const line of lines) {
     const trimmed = line.trim();
-
     if (trimmed === '') {
-      if (inBlockquote) {
-        html += '</blockquote>';
-        inBlockquote = false;
-      }
+      if (inBlockquote) { html += '</blockquote>'; inBlockquote = false; }
       continue;
     }
-
-    // Headers
-    const headerMatch = trimmed.match(/^(#{1,6})\s+(.+)$/);
-    if (headerMatch) {
-      if (inBlockquote) {
-        html += '</blockquote>';
-        inBlockquote = false;
-      }
-      const level = headerMatch[1].length;
-      html += `<h${level + 2}>${escapeHtml(headerMatch[2])}</h${level + 2}>`;
+    const hm = trimmed.match(/^(#{1,6})\s+(.+)$/);
+    if (hm) {
+      if (inBlockquote) { html += '</blockquote>'; inBlockquote = false; }
+      html += `<h${hm[1].length + 2}>${esc(hm[2])}</h${hm[1].length + 2}>`;
       continue;
     }
-
-    // Blockquote
     if (trimmed.startsWith('>')) {
-      const content = trimmed.slice(1).trim();
-      if (!inBlockquote) {
-        html += '<blockquote>';
-        inBlockquote = true;
-      }
-      html += escapeHtml(content) + ' ';
+      if (!inBlockquote) { html += '<blockquote>'; inBlockquote = true; }
+      html += esc(trimmed.slice(1).trim()) + ' ';
       continue;
     }
-
-    if (inBlockquote) {
-      html += '</blockquote>';
-      inBlockquote = false;
-    }
-
-    // Paragraph with inline formatting
-    html += `<p>${inlineFormat(trimmed)}</p>`;
+    if (inBlockquote) { html += '</blockquote>'; inBlockquote = false; }
+    html += `<p>${fmt(trimmed)}</p>`;
   }
-
-  if (inBlockquote) {
-    html += '</blockquote>';
-  }
-
+  if (inBlockquote) html += '</blockquote>';
   return html;
 }
 
-function inlineFormat(text: string): string {
-  let result = escapeHtml(text);
-  // Bold
-  result = result.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  // Italic
-  result = result.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  // Inline code
-  result = result.replace(/`(.+?)`/g, '<code>$1</code>');
-  return result;
+function fmt(t: string) {
+  let r = esc(t);
+  r = r.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  r = r.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  r = r.replace(/`(.+?)`/g, '<code>$1</code>');
+  return r;
 }
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+function esc(s: string) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }

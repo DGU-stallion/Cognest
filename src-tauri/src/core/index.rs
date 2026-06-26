@@ -84,6 +84,7 @@ pub enum FragmentFilter {
 pub enum ArticleFilter {
     All,
     ByStatus(String),
+    #[allow(dead_code)]
     ByTags(Vec<String>),
 }
 
@@ -100,6 +101,7 @@ pub enum IndexError {
     Frontmatter(#[from] frontmatter::FrontmatterError),
 
     #[error("索引损坏")]
+    #[allow(dead_code)]
     Corrupted,
 }
 

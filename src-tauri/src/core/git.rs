@@ -55,10 +55,12 @@ pub enum GitError {
 /// Git module wrapping a git2::Repository.
 pub struct GitModule {
     repo: Repository,
+    #[allow(dead_code)]
     vault_path: PathBuf,
 }
 
 /// Required entries in .gitignore
+#[allow(dead_code)]
 const GITIGNORE_ENTRIES: &[&str] = &[".cognest/", "*.sqlite", "vectors.bin"];
 
 impl GitModule {
@@ -216,6 +218,7 @@ impl GitModule {
     /// Ensure .gitignore contains required exclusion entries.
     ///
     /// Creates .gitignore if it doesn't exist, or appends missing entries.
+    #[allow(dead_code)]
     pub fn ensure_gitignore(&self) -> Result<(), GitError> {
         let gitignore_path = self.vault_path.join(".gitignore");
 
