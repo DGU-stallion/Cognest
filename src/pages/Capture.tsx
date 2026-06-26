@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useCaptureStore } from '../stores/captureStore';
 import type { Fragment, FragmentFilter } from '../stores/captureStore';
 import './Capture.css';
@@ -175,10 +176,60 @@ export default function Capture() {
 
 function FragmentItem({ fragment }: { fragment: Fragment }) {
   const isCategorized = fragment.topics.length > 0;
+  const [editing, setEditing] = useState(false);
+  const [editContent, setEditContent] = useState(fragment.content);
+
+  const handleStartEdit = useCallback(() => {
+    setEditContent(fragment.content);
+    setEditing(true);
+  }, [fragment.content]);
+
+  const handleSave = useCallback(async () => {
+    const trimmed = editContent.trim();
+    if (!trimmed || trimmed === fragment.content) {
+      setEditing(false);
+      return;
+    }
+    try {
+      await invoke('update_fragment', { id: fragment.id, content: trimmed });
+      // Update local state (fragment is from parent, will refresh on next load)
+      setEditing(false);
+      // Trigger a reload of fragments
+      useCaptureStore.getState().loadFragments();
+    } catch (e) {
+      console.error('Failed to update fragment:', e);
+    }
+  }, [editContent, fragment.id, fragment.content]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSave();
+      }
+      if (e.key === 'Escape') {
+        setEditing(false);
+      }
+    },
+    [handleSave],
+  );
 
   return (
     <div className="frag">
-      <div className="frag-content">{fragment.content}</div>
+      {editing ? (
+        <textarea
+          className="frag-edit-textarea"
+          value={editContent}
+          onChange={(e) => setEditContent(e.target.value)}
+          onBlur={handleSave}
+          onKeyDown={handleKeyDown}
+          autoFocus
+        />
+      ) : (
+        <div className="frag-content" onClick={handleStartEdit}>
+          {fragment.content}
+        </div>
+      )}
       <div className="frag-meta">
         <span className="frag-time">{formatTime(fragment.created_at)}</span>
         {fragment.tags.map((tag) => (
@@ -194,27 +245,29 @@ function FragmentItem({ fragment }: { fragment: Fragment }) {
       </div>
 
       {/* Categorized check icon (hidden on hover) */}
-      {isCategorized && (
+      {isCategorized && !editing && (
         <svg className="frag-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M20 6L9 17l-5-5" />
         </svg>
       )}
 
       {/* Hover action buttons */}
-      <div className="frag-actions">
-        <button title="引用到创作">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z" />
-          </svg>
-        </button>
-        <button title="查看关联">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="6" cy="12" r="3" />
-            <circle cx="18" cy="6" r="3" />
-            <path d="M8.6 10.5l6.3-3" />
-          </svg>
-        </button>
-      </div>
+      {!editing && (
+        <div className="frag-actions">
+          <button title="引用到创作">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z" />
+            </svg>
+          </button>
+          <button title="查看关联">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="6" cy="12" r="3" />
+              <circle cx="18" cy="6" r="3" />
+              <path d="M8.6 10.5l6.3-3" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   );
 }

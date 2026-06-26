@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useArticlesStore } from '../stores/articlesStore';
+import { useComposeStore } from '../stores/composeStore';
+import { useAppStore } from '../stores/appStore';
 import type { Article, ArticleStatus } from '../stores/articlesStore';
 import './Articles.css';
 
@@ -110,10 +112,9 @@ export default function Articles() {
 
   const handleEdit = useCallback(() => {
     if (!selectedArticle) return;
-    // Navigate to compose page with article id
-    // For now, use appStore to switch page (compose with article context)
-    // This will be wired when compose page supports editing
-    console.log('Edit article:', selectedArticle.id);
+    // Load article into compose store and switch to compose page
+    useComposeStore.getState().loadArticle(selectedArticle.id);
+    useAppStore.getState().setCurrentPage('compose');
   }, [selectedArticle]);
 
   const handleExport = useCallback(async () => {

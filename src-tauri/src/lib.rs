@@ -164,6 +164,7 @@ pub fn run() {
             commands::create_fragment,
             commands::list_fragments,
             commands::search_fragments,
+            commands::update_fragment,
             commands::create_article,
             commands::get_article,
             commands::save_article,

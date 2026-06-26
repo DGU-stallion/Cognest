@@ -13,6 +13,16 @@ export interface ArticleMeta {
   tags: string[];
 }
 
+export interface ArticleResponse {
+  id: string;
+  title: string;
+  status: string;
+  created: string;
+  updated: string;
+  tags: string[];
+  body: string;
+}
+
 export interface ComposeState {
   currentArticleId: string | null;
   title: string;
@@ -22,6 +32,8 @@ export interface ComposeState {
   immersiveMode: boolean;
   relatedFragments: Fragment[];
   loading: boolean;
+  /** The article body content loaded from backend */
+  bodyContent: string;
 
   toggleImmersive: () => void;
   setTitle: (title: string) => void;
@@ -30,6 +42,7 @@ export interface ComposeState {
   loadRelated: () => Promise<void>;
   loadArticle: (id: string) => Promise<void>;
   saveArticle: (html: string) => Promise<void>;
+  createNewArticle: () => Promise<void>;
 }
 
 const STATUS_CYCLE: ArticleStatus[] = ['draft', 'editing', 'completed'];
@@ -43,6 +56,7 @@ export const useComposeStore = create<ComposeState>((set, get) => ({
   immersiveMode: false,
   relatedFragments: [],
   loading: false,
+  bodyContent: '',
 
   toggleImmersive: () => set((s) => ({ immersiveMode: !s.immersiveMode })),
 
@@ -73,17 +87,28 @@ export const useComposeStore = create<ComposeState>((set, get) => ({
   loadArticle: async (id: string) => {
     set({ loading: true, currentArticleId: id });
     try {
-      const meta = await invoke<ArticleMeta>('get_article', { id });
+      const article = await invoke<ArticleResponse>('get_article', { id });
       set({
-        title: meta.title,
-        status: meta.status,
-        wordCount: meta.word_count,
-        updatedAt: meta.updated_at,
+        title: article.title,
+        status: article.status as ArticleStatus,
+        wordCount: 0,
+        updatedAt: article.updated,
+        bodyContent: article.body,
         loading: false,
       });
     } catch (e) {
       console.error('Failed to load article:', e);
       set({ loading: false });
+    }
+  },
+
+  createNewArticle: async () => {
+    try {
+      const id = await invoke<string>('create_article', { title: '无标题文章' });
+      // Load the newly created article
+      await get().loadArticle(id);
+    } catch (e) {
+      console.error('Failed to create article:', e);
     }
   },
 
@@ -94,8 +119,9 @@ export const useComposeStore = create<ComposeState>((set, get) => ({
       await invoke('save_article', {
         id: currentArticleId,
         title,
-        content: html,
         status,
+        tags: [] as string[],
+        body: html,
       });
       set({ updatedAt: new Date().toISOString() });
     } catch (e) {

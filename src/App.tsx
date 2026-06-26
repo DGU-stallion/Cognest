@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from './stores/appStore';
+import { useComposeStore } from './stores/composeStore';
 import { useStartup } from './hooks/useStartup';
 import Sidebar from './components/Sidebar';
+import NavBar from './components/NavBar';
 import ViewStack from './components/ViewStack';
 import StatusBar from './components/StatusBar';
 import QuickCaptureModal from './components/QuickCaptureModal';
@@ -44,6 +46,12 @@ function App() {
         e.preventDefault();
         setQuickCaptureOpen(true);
       }
+      // ⌘N to create new article and switch to compose page
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        useComposeStore.getState().createNewArticle();
+        useAppStore.getState().setCurrentPage('compose');
+      }
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
@@ -64,22 +72,25 @@ function App() {
         <Sidebar onQuickCapture={openQuickCapture} />
 
         {/* Main content area — ViewStack per page, only active page visible */}
-        <main style={{ flex: 1, overflow: 'hidden', background: 'var(--surface-warm)', position: 'relative' }}>
-          {PAGE_IDS.map((id) => {
-            const Comp = PAGE_MAP[id];
-            return (
-              <div
-                key={id}
-                style={{
-                  display: currentPage === id ? 'block' : 'none',
-                  width: '100%',
-                  height: '100%',
-                }}
-              >
-                <ViewStack pageId={id} rootComponent={<Comp />} />
-              </div>
-            );
-          })}
+        <main style={{ flex: 1, overflow: 'hidden', background: 'var(--surface-warm)', position: 'relative', display: 'flex', flexDirection: 'column' }}>
+          <NavBar />
+          <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
+            {PAGE_IDS.map((id) => {
+              const Comp = PAGE_MAP[id];
+              return (
+                <div
+                  key={id}
+                  style={{
+                    display: currentPage === id ? 'block' : 'none',
+                    width: '100%',
+                    height: '100%',
+                  }}
+                >
+                  <ViewStack pageId={id} rootComponent={<Comp />} />
+                </div>
+              );
+            })}
+          </div>
         </main>
       </div>
 

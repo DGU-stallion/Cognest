@@ -207,3 +207,19 @@
   font-size: var(--text-base);
   margin-bottom: 8px;
 }
+
+
+/* Fragment inline edit */
+.frag-edit-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 8px 0;
+  border: none;
+  border-bottom: 2px solid var(--accent);
+  background: transparent;
+  font: var(--text-base)/1.6 var(--font-body);
+  color: var(--fg);
+  resize: vertical;
+  outline: none;
+  margin-bottom: 8px;
+}

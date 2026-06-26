@@ -33,29 +33,41 @@ function formatUpdatedAt(iso: string): string {
 
 export default function Compose() {
   const {
+    currentArticleId,
     title,
     status,
     wordCount,
     updatedAt,
     immersiveMode,
     relatedFragments,
+    bodyContent,
+    loading,
     toggleImmersive,
     setTitle,
     setWordCount,
     cycleStatus,
     loadRelated,
     saveArticle,
+    createNewArticle,
   } = useComposeStore();
 
   const [activeTab, setActiveTab] = useState<RefTab>('inspirations');
   const [searchQuery, setSearchQuery] = useState('');
   const [insertingId, setInsertingId] = useState<string | null>(null);
   const editorRef = useRef<EditorHandle>(null);
+  const titleSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load related fragments on mount
   useEffect(() => {
     loadRelated();
   }, [loadRelated]);
+
+  // When currentArticleId changes and bodyContent is loaded, push it into the editor
+  useEffect(() => {
+    if (currentArticleId && bodyContent !== undefined && editorRef.current) {
+      editorRef.current.setContent(bodyContent);
+    }
+  }, [currentArticleId, bodyContent]);
 
   // Keyboard shortcut ⌘⇧F for immersive mode
   useEffect(() => {
@@ -92,13 +104,54 @@ export default function Compose() {
     [setWordCount],
   );
 
-  // Title change handler
+  // Title change handler with debounced save
   const handleTitleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       setTitle(e.target.value);
+
+      // Debounce title save (1s)
+      if (titleSaveTimerRef.current) {
+        clearTimeout(titleSaveTimerRef.current);
+      }
+      titleSaveTimerRef.current = setTimeout(() => {
+        // Trigger a save with current editor content
+        const html = editorRef.current?.getHTML() ?? '';
+        saveArticle(html);
+      }, 1000);
     },
-    [setTitle],
+    [setTitle, saveArticle],
   );
+
+  // Cleanup title save timer
+  useEffect(() => {
+    return () => {
+      if (titleSaveTimerRef.current) {
+        clearTimeout(titleSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Toolbar button handlers
+  const handleBold = useCallback(() => {
+    editorRef.current?.getEditor()?.chain().focus().toggleBold().run();
+  }, []);
+
+  const handleItalic = useCallback(() => {
+    editorRef.current?.getEditor()?.chain().focus().toggleItalic().run();
+  }, []);
+
+  const handleCode = useCallback(() => {
+    editorRef.current?.getEditor()?.chain().focus().toggleCode().run();
+  }, []);
+
+  const handleBlockquote = useCallback(() => {
+    editorRef.current?.getEditor()?.chain().focus().toggleBlockquote().run();
+  }, []);
+
+  // Handle new article creation
+  const handleNewArticle = useCallback(() => {
+    createNewArticle();
+  }, [createNewArticle]);
 
   // Filter fragments by search query
   const filteredFragments = searchQuery
@@ -169,22 +222,29 @@ export default function Compose() {
       {/* Center: editor */}
       <div className="editor-area">
         <div className="editor-toolbar">
-          <button title="加粗">
+          <button title="新建文章 (⌘N)" onClick={handleNewArticle} className="new-article-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            新建
+          </button>
+          <div className="sep" />
+          <button title="加粗" onClick={handleBold}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M6 4h8a4 4 0 014 4 4 4 0 01-4 4H6zM6 12h9a4 4 0 014 4 4 4 0 01-4 4H6z" />
             </svg>
           </button>
-          <button title="斜体">
+          <button title="斜体" onClick={handleItalic}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M19 4h-9M14 20H5M15 4L9 20" />
             </svg>
           </button>
-          <button title="代码">
+          <button title="代码" onClick={handleCode}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
             </svg>
           </button>
-          <button title="引用">
+          <button title="引用" onClick={handleBlockquote}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
               <path d="M10 11h-4a1 1 0 01-1-1V6a1 1 0 011-1h3a1 1 0 011 1v5zm0 0a4 4 0 01-4 4M19 11h-4a1 1 0 01-1-1V6a1 1 0 011-1h3a1 1 0 011 1v5zm0 0a4 4 0 01-4 4" />
             </svg>
@@ -205,26 +265,37 @@ export default function Compose() {
         </div>
 
         <div className="editor-body">
-          <input
-            className="doc-title"
-            type="text"
-            placeholder="标题…"
-            value={title}
-            onChange={handleTitleChange}
-          />
-          <div className="doc-meta">
-            <span className={`status ${status}`} onClick={cycleStatus}>
-              {STATUS_LABELS[status]}
-            </span>
-            <span>{wordCount} 字</span>
-            {updatedAt && <span>最后编辑：{formatUpdatedAt(updatedAt)}</span>}
-          </div>
-          <Editor
-            ref={editorRef}
-            content=""
-            onUpdate={handleEditorUpdate}
-            onWordCountChange={handleWordCountChange}
-          />
+          {!currentArticleId && !loading ? (
+            <div className="compose-empty">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+              </svg>
+              <p>点击「+ 新建」或按 ⌘N 开始创作</p>
+            </div>
+          ) : (
+            <>
+              <input
+                className="doc-title"
+                type="text"
+                placeholder="标题…"
+                value={title}
+                onChange={handleTitleChange}
+              />
+              <div className="doc-meta">
+                <span className={`status ${status}`} onClick={cycleStatus}>
+                  {STATUS_LABELS[status]}
+                </span>
+                <span>{wordCount} 字</span>
+                {updatedAt && <span>最后编辑：{formatUpdatedAt(updatedAt)}</span>}
+              </div>
+              <Editor
+                ref={editorRef}
+                content={bodyContent}
+                onUpdate={handleEditorUpdate}
+                onWordCountChange={handleWordCountChange}
+              />
+            </>
+          )}
         </div>
       </div>
 

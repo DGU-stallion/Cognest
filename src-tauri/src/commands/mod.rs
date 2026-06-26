@@ -105,6 +105,18 @@ pub fn search_fragments(
         .map_err(|e| e.to_string())
 }
 
+/// Update a fragment's body content (keeps frontmatter, replaces body).
+#[tauri::command]
+pub fn update_fragment(
+    state: State<'_, AppState>,
+    id: String,
+    content: String,
+) -> Result<(), String> {
+    let repo = state.repo.lock().map_err(|e| e.to_string())?;
+    repo.update_fragment_content(&id, &content)
+        .map_err(|e| e.to_string())
+}
+
 // ─── Article Commands ────────────────────────────────────────────────────────
 
 /// Create a new article with the given title.

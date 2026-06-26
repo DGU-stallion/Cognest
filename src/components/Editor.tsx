@@ -41,6 +41,11 @@ export interface EditorHandle {
   getText: () => string;
   /** Get current HTML content */
   getHTML: () => string;
+  /** Set editor content programmatically */
+  setContent: (html: string) => void;
+  /** Get the TipTap editor instance for toolbar commands */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  getEditor: () => any;
 }
 
 /**
@@ -147,8 +152,14 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
         const html = editor?.getHTML() ?? '';
         return serializeReferenceChips(html);
       },
+      setContent: (html: string) => {
+        if (editor) {
+          editor.commands.setContent(deserializeReferenceChips(html, existingFragmentIds));
+        }
+      },
+      getEditor: () => editor ?? null,
     }),
-    [editor, insertReference],
+    [editor, insertReference, existingFragmentIds],
   );
 
   return (

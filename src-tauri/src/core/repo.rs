@@ -225,6 +225,25 @@ impl FileRepo {
         Ok(())
     }
 
+    /// Update a fragment's body content (keeps frontmatter, replaces body).
+    pub fn update_fragment_content(&self, id: &str, new_content: &str) -> Result<(), RepoError> {
+        if new_content.trim().is_empty() {
+            return Err(RepoError::InvalidInput(
+                "碎片内容不能为空白".to_string(),
+            ));
+        }
+
+        let file_path = self.find_fragment_path(id)?;
+        let file_content = std::fs::read_to_string(&file_path)?;
+        let parsed = frontmatter::parse::<FragmentMeta>(&file_content)?;
+
+        // Re-serialize with the same meta but new body
+        let document = frontmatter::serialize(&parsed.meta, new_content)?;
+        std::fs::write(&file_path, &document)?;
+
+        Ok(())
+    }
+
     /// Compute SHA-256 hash of content bytes, returned as lowercase hex string.
     pub fn content_hash(content: &[u8]) -> String {
         let mut hasher = Sha256::new();
