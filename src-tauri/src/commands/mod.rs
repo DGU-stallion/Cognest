@@ -126,7 +126,32 @@ pub fn create_article(
     title: String,
 ) -> Result<String, String> {
     let repo = state.repo.lock().map_err(|e| e.to_string())?;
-    repo.create_article(&title).map_err(|e| e.to_string())
+    let id = repo.create_article(&title).map_err(|e| e.to_string())?;
+
+    // Immediately update IndexDb so article is visible in list
+    let index = state.index.lock().map_err(|e| e.to_string())?;
+    let (meta, body) = repo.read_article(&id).map_err(|e| e.to_string())?;
+    let status_str = match meta.status {
+        ArticleStatus::Draft => "draft",
+        ArticleStatus::Editing => "editing",
+        ArticleStatus::Completed => "completed",
+    };
+    let content_for_hash = format!("{}{}", meta.title, body);
+    let content_hash = FileRepo::content_hash(content_for_hash.as_bytes());
+    let tags_json = serde_json::to_string(&meta.tags).unwrap_or_else(|_| "[]".to_string());
+    let _ = tags_json; // used below
+    let record = crate::core::index::ArticleRecord {
+        id: id.clone(),
+        title: meta.title,
+        status: status_str.to_string(),
+        created_at: meta.created.to_rfc3339(),
+        updated_at: meta.updated.to_rfc3339(),
+        tags: meta.tags,
+        content_hash,
+    };
+    let _ = index.insert_article(&record);
+
+    Ok(id)
 }
 
 /// Get a single article by ID (returns meta + body).
@@ -180,7 +205,29 @@ pub fn save_article(
         tags,
     };
     repo.save_article(&id, &meta, &body)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Immediately update IndexDb so changes are reflected in article list
+    let index = state.index.lock().map_err(|e| e.to_string())?;
+    let content_for_hash = format!("{}{}", meta.title, body);
+    let content_hash = FileRepo::content_hash(content_for_hash.as_bytes());
+    let status_str = match meta.status {
+        ArticleStatus::Draft => "draft",
+        ArticleStatus::Editing => "editing",
+        ArticleStatus::Completed => "completed",
+    };
+    let record = crate::core::index::ArticleRecord {
+        id: id.clone(),
+        title: meta.title,
+        status: status_str.to_string(),
+        created_at: meta.created.to_rfc3339(),
+        updated_at: meta.updated.to_rfc3339(),
+        tags: meta.tags,
+        content_hash,
+    };
+    let _ = index.insert_article(&record); // insert_article uses INSERT OR REPLACE
+
+    Ok(())
 }
 
 /// Delete an article by ID.
