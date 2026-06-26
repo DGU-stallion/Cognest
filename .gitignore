@@ -29,3 +29,6 @@ dist-ssr
 
 # Rust build artifacts
 target/
+
+# Use pnpm only, no npm lock
+package-lock.json

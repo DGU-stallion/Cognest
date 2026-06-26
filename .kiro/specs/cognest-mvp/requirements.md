@@ -65,7 +65,8 @@
 4. IF 碎片文件写入磁盘失败（如权限不足或磁盘空间不足），THEN THE App_Shell SHALL 向用户显示包含失败原因的错误提示，且不向 Index_DB 写入任何记录
 5. WHEN 碎片文件创建成功后，THE Index_DB SHALL 在 3 秒内将该碎片的元数据和正文内容写入 fragments 表和 fragments_fts 表，写入完成前不影响用户继续提交新碎片
 6. IF Index_DB 写入失败，THEN THE App_Shell SHALL 保留已创建的碎片文件不做删除，并将该碎片标记为待索引状态以便下次启动时重建索引
-7. THE App_Shell SHALL 保证碎片文件一旦创建，Frontmatter 结束标记之后的正文内容永不被应用修改或删除（Frontmatter 中的 tags 和 topics 字段允许由 AI Agent 后续更新）
+7. ~~THE App_Shell SHALL 保证碎片文件一旦创建，Frontmatter 结束标记之后的正文内容永不被应用修改或删除（Frontmatter 中的 tags 和 topics 字段允许由 AI Agent 后续更新）~~
+   > **⚠️ Phase 1.5 变更：** 碎片正文已改为允许用户编辑（`update_fragment` IPC），不再 immutable。原始 immutable log 约束取消。
 
 ### 需求 4：Frontmatter 解析器
 
