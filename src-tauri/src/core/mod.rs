@@ -6,3 +6,6 @@ pub mod repo;
 pub mod index;
 pub mod watcher;
 pub mod git;
+
+#[cfg(test)]
+mod properties;

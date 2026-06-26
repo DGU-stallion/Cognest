@@ -1,0 +1,212 @@
+.sidebar {
+  width: 248px;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  transition: width var(--motion-base) var(--ease-standard);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar.collapsed {
+  width: 60px;
+}
+
+/* Brand */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
+  min-height: 36px;
+}
+
+.sidebar-brand-mark {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.sidebar-brand-mark svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.sidebar-brand-text {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  letter-spacing: var(--tracking-display);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.sidebar.collapsed .sidebar-brand-text {
+  display: none;
+}
+
+.sidebar-toggle {
+  margin-left: auto;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+
+.sidebar-toggle:hover {
+  color: var(--fg);
+}
+
+.sidebar-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  margin-left: 0;
+}
+
+/* In collapsed state, hide brand mark and center the toggle as the expand button */
+.sidebar.collapsed .sidebar-brand {
+  justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-brand-mark {
+  display: none;
+}
+
+/* Quick capture button */
+.sidebar-capture-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-on);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background var(--motion-fast) var(--ease-standard);
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.sidebar-capture-btn:hover {
+  background: var(--accent-hover);
+}
+
+.sidebar-capture-btn:active {
+  background: var(--accent-active);
+}
+
+.sidebar-capture-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.sidebar-capture-btn .capture-text {
+  overflow: hidden;
+}
+
+.sidebar.collapsed .sidebar-capture-btn .capture-text,
+.sidebar.collapsed .sidebar-capture-btn kbd {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-capture-btn {
+  justify-content: center;
+  padding: var(--space-2);
+}
+
+.sidebar-capture-btn kbd {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  opacity: 0.7;
+  font-family: var(--font-body);
+}
+
+/* Nav */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-4);
+}
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  text-align: left;
+  width: 100%;
+  white-space: nowrap;
+  transition: background var(--motion-fast) var(--ease-standard),
+              color var(--motion-fast) var(--ease-standard);
+}
+
+.sidebar-nav-item:hover {
+  background: var(--surface);
+}
+
+.sidebar-nav-item.active {
+  background: #ffffff;
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.sidebar-nav-item.active .nav-icon {
+  color: var(--accent);
+}
+
+.sidebar-nav-item .nav-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: color var(--motion-fast) var(--ease-standard);
+}
+
+.sidebar-nav-item .nav-icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.sidebar-nav-item .nav-label {
+  flex: 1;
+  overflow: hidden;
+}
+
+.sidebar.collapsed .sidebar-nav-item .nav-label,
+.sidebar.collapsed .sidebar-nav-item .nav-count {
+  display: none;
+}
+
+.sidebar.collapsed .sidebar-nav-item {
+  justify-content: center;
+  padding: var(--space-2);
+}
+
+.sidebar-nav-item .nav-count {
+  font-size: var(--text-xs);
+  color: var(--meta);
+  margin-left: auto;
+}

@@ -1,0 +1,230 @@
+/* ── Discover Page Styles ──────────────── */
+.discover-feed {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 38px 40px 80px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+/* Header */
+.discover-head {
+  margin-bottom: 26px;
+}
+
+.discover-head .eyebrow {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.discover-head h1 {
+  font: 600 var(--text-2xl) / 1.05 var(--font-display);
+  letter-spacing: var(--tracking-display);
+}
+
+.discover-head p {
+  color: var(--muted);
+  font-size: var(--text-base);
+  margin-top: 8px;
+  max-width: 52ch;
+}
+
+/* Feed Cards */
+.discover-card {
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  margin-bottom: var(--space-5);
+  position: relative;
+  transition: opacity var(--motion-base) var(--ease-standard),
+    transform var(--motion-base) var(--ease-standard);
+}
+
+.discover-card.dismissing {
+  opacity: 0;
+  transform: translateX(30px);
+  pointer-events: none;
+}
+
+.discover-card .card-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.discover-card .card-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent), transparent 92%);
+  border-radius: var(--radius-pill);
+  padding: 4px 10px;
+}
+
+.discover-card .card-kind svg {
+  width: 14px;
+  height: 14px;
+}
+
+.discover-card .card-dismiss {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--meta);
+  transition: background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.discover-card .card-dismiss:hover {
+  background: var(--surface);
+  color: var(--fg);
+}
+
+.discover-card .card-dismiss svg {
+  width: 16px;
+  height: 16px;
+}
+
+.discover-card h3 {
+  font: 500 var(--text-lg) / 1.3 var(--font-display);
+  letter-spacing: -0.01em;
+  margin-bottom: var(--space-2);
+}
+
+.discover-card .card-body {
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: var(--leading-body);
+  margin-bottom: var(--space-4);
+}
+
+/* Stats grid within card */
+.discover-card .card-stats {
+  display: flex;
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+
+.discover-card .card-stats .stat {
+  text-align: center;
+}
+
+.discover-card .card-stats .stat .n {
+  font: 600 var(--text-xl) / 1.2 var(--font-display);
+  color: var(--fg);
+}
+
+.discover-card .card-stats .stat .k {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* Tags list */
+.discover-card .tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.discover-card .tag-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  padding: 6px 12px;
+}
+
+.discover-card .tag-item .tag-count {
+  font-size: var(--text-xs);
+  color: var(--meta);
+  font-weight: 400;
+}
+
+/* Card actions */
+.discover-card .card-actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.discover-card .card-actions .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--accent-on);
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.discover-card .card-actions .btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.discover-card .card-actions .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--fg-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.discover-card .card-actions .btn-secondary:hover {
+  background: var(--border-soft);
+}
+
+/* Empty state */
+.discover-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-12) var(--space-6);
+  text-align: center;
+}
+
+.discover-empty svg {
+  width: 48px;
+  height: 48px;
+  color: var(--meta);
+  margin-bottom: var(--space-4);
+}
+
+.discover-empty p {
+  color: var(--muted);
+  font-size: var(--text-sm);
+  max-width: 36ch;
+  line-height: var(--leading-body);
+}
+
+/* No tags empty state within card */
+.discover-card .tag-empty {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  padding: var(--space-2) 0;
+}

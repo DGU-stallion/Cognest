@@ -1,0 +1,296 @@
+/* ── Compose page styles ───────────────── */
+.compose-shell {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* Left panel: related items (灵感/话题/文章) */
+.ref-panel {
+  width: 280px;
+  flex: 0 0 280px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.ref-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+.ref-tabs button {
+  flex: 1;
+  padding: 11px 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  transition: color var(--motion-fast), border-color var(--motion-fast);
+}
+.ref-tabs button:hover {
+  color: var(--fg-2);
+}
+.ref-tabs button.on {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+
+.ref-search {
+  margin: 12px 14px 8px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--fg);
+  outline: none;
+  width: calc(100% - 28px);
+  transition: border-color var(--motion-fast);
+}
+.ref-search:focus {
+  border-color: var(--accent);
+}
+.ref-search::placeholder {
+  color: var(--meta);
+}
+
+.ref-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 10px 16px;
+}
+
+.ref-item {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-bottom: 4px;
+  transition: background var(--motion-fast), transform var(--motion-fast);
+}
+.ref-item:hover {
+  background: var(--bg);
+}
+.ref-item.inserting {
+  background: color-mix(in oklab, var(--accent), transparent 88%);
+  transform: scale(0.98);
+}
+
+.ref-item .ri-text {
+  font-size: var(--text-sm);
+  color: var(--fg);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.ref-item .ri-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: var(--text-xs);
+  color: var(--meta);
+}
+
+.ref-item .ri-tag {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent), transparent 90%);
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+}
+.ref-item .ri-tag.topic {
+  color: #7c3aed;
+  background: color-mix(in oklab, #7c3aed, transparent 90%);
+}
+.ref-item .ri-tag.article {
+  color: var(--success);
+  background: color-mix(in oklab, var(--success), transparent 88%);
+}
+
+.ref-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Editor area */
+.editor-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--border-soft);
+  flex: 0 0 auto;
+}
+.editor-toolbar button {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  color: var(--fg-2);
+  transition: background var(--motion-fast);
+}
+.editor-toolbar button:hover {
+  background: var(--surface);
+}
+.editor-toolbar button svg {
+  width: 16px;
+  height: 16px;
+}
+.editor-toolbar .sep {
+  width: 1px;
+  height: 20px;
+  background: var(--border-soft);
+  margin: 0 4px;
+}
+.editor-toolbar .spacer {
+  flex: 1;
+}
+.editor-toolbar .immerse {
+  font-size: var(--text-sm);
+  color: var(--muted);
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-soft);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  width: auto;
+  height: auto;
+}
+.editor-toolbar .immerse:hover {
+  background: var(--surface);
+  color: var(--fg);
+  border-color: var(--border);
+}
+.editor-toolbar .immerse svg {
+  width: 14px;
+  height: 14px;
+}
+
+.editor-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px 48px 80px;
+}
+
+.editor-body .doc-title {
+  font: 600 var(--text-2xl)/1.1 var(--font-display);
+  letter-spacing: var(--tracking-display);
+  border: none;
+  outline: none;
+  width: 100%;
+  margin-bottom: 8px;
+  color: var(--fg);
+  background: transparent;
+}
+.editor-body .doc-title::placeholder {
+  color: var(--border);
+}
+
+.editor-body .doc-meta {
+  font-size: var(--text-sm);
+  color: var(--meta);
+  margin-bottom: 24px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.doc-meta .status {
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  cursor: pointer;
+  transition: opacity var(--motion-fast);
+  user-select: none;
+}
+.doc-meta .status:hover {
+  opacity: 0.8;
+}
+.doc-meta .status.draft {
+  color: #92400e;
+  background: color-mix(in oklab, var(--warn), transparent 85%);
+}
+.doc-meta .status.editing {
+  color: #1d4ed8;
+  background: color-mix(in oklab, #3b82f6, transparent 85%);
+}
+.doc-meta .status.completed {
+  color: #166534;
+  background: color-mix(in oklab, var(--success), transparent 85%);
+}
+
+/* Right AI panel */
+.ai-side {
+  width: 320px;
+  flex: 0 0 320px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-warm);
+}
+
+.ai-side .ai-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  flex: 0 0 auto;
+}
+.ai-side .ai-header svg {
+  width: 16px;
+  height: 16px;
+  color: var(--accent);
+}
+.ai-side .ai-header span {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--fg-2);
+}
+
+.ai-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+/* Immersive mode */
+.compose-shell.immersive .ref-panel,
+.compose-shell.immersive .ai-side {
+  display: none;
+}
+.compose-shell.immersive .editor-body {
+  padding: 48px 120px 80px;
+  max-width: 720px;
+  margin: 0 auto;
+}

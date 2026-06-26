@@ -1,136 +1,99 @@
-import { useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import "./styles/tokens.css";
+import { useCallback, useEffect, useState } from 'react';
+import { useAppStore } from './stores/appStore';
+import { useStartup } from './hooks/useStartup';
+import Sidebar from './components/Sidebar';
+import ViewStack from './components/ViewStack';
+import StatusBar from './components/StatusBar';
+import QuickCaptureModal from './components/QuickCaptureModal';
+import SettingsModal from './components/SettingsModal';
+import ToastContainer from './components/Toast';
+import Discover from './pages/Discover';
+import Compose from './pages/Compose';
+import Capture from './pages/Capture';
+import Articles from './pages/Articles';
+
+type AppPage = 'discover' | 'compose' | 'capture' | 'articles';
+
+const PAGE_MAP: Record<AppPage, React.ComponentType> = {
+  discover: Discover,
+  compose: Compose,
+  capture: Capture,
+  articles: Articles,
+};
+
+const PAGE_IDS: AppPage[] = ['discover', 'capture', 'compose', 'articles'];
 
 function App() {
-  const [greeting, setGreeting] = useState("");
-  const [backendEvent, setBackendEvent] = useState("");
-  const [name, setName] = useState("");
+  const { currentPage } = useAppStore();
+  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  useStartup();
 
-  useEffect(() => {
-    // Listen for backend-to-frontend events (verifies back-to-front IPC)
-    const unlisten = listen<string>("backend-ready", (event) => {
-      setBackendEvent(event.payload);
-    });
-
-    return () => {
-      unlisten.then((fn) => fn());
-    };
+  const openQuickCapture = useCallback(() => {
+    setQuickCaptureOpen(true);
   }, []);
 
-  async function handleGreet() {
-    // Verifies front-to-back IPC
-    const result = await invoke<string>("greet", { name: name || "World" });
-    setGreeting(result);
-  }
+  const closeQuickCapture = useCallback(() => {
+    setQuickCaptureOpen(false);
+  }, []);
+
+  // Global shortcut ⌘⇧Space to open quick capture
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.code === 'Space') {
+        e.preventDefault();
+        setQuickCaptureOpen(true);
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Expose openQuickCapture on window for Sidebar button
+  useEffect(() => {
+    (window as unknown as Record<string, unknown>).__openQuickCapture = openQuickCapture;
+    return () => {
+      delete (window as unknown as Record<string, unknown>).__openQuickCapture;
+    };
+  }, [openQuickCapture]);
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
-      {/* Sidebar placeholder */}
-      <aside
-        style={{
-          width: 248,
-          background: "var(--bg)",
-          borderRight: "1px solid var(--border)",
-          padding: "var(--space-4)",
-          display: "flex",
-          flexDirection: "column",
-          gap: "var(--space-3)",
-        }}
-      >
-        <h2
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: "var(--text-lg)",
-            letterSpacing: "var(--tracking-display)",
-          }}
-        >
-          Cognest
-        </h2>
-        <p style={{ color: "var(--muted)", fontSize: "var(--text-sm)" }}>
-          Sidebar — 导航区域
-        </p>
-      </aside>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Sidebar */}
+        <Sidebar onQuickCapture={openQuickCapture} />
 
-      {/* Main content */}
-      <main
-        style={{
-          flex: 1,
-          padding: "var(--space-8)",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: "var(--space-4)",
-        }}
-      >
-        <h1
-          style={{
-            fontFamily: "var(--font-display)",
-            fontSize: "var(--text-2xl)",
-            letterSpacing: "var(--tracking-display)",
-            lineHeight: "var(--leading-tight)",
-          }}
-        >
-          Cognest
-        </h1>
-        <p style={{ color: "var(--muted)" }}>IPC 双向通信验证</p>
+        {/* Main content area — ViewStack per page, only active page visible */}
+        <main style={{ flex: 1, overflow: 'hidden', background: 'var(--surface-warm)', position: 'relative' }}>
+          {PAGE_IDS.map((id) => {
+            const Comp = PAGE_MAP[id];
+            return (
+              <div
+                key={id}
+                style={{
+                  display: currentPage === id ? 'block' : 'none',
+                  width: '100%',
+                  height: '100%',
+                }}
+              >
+                <ViewStack pageId={id} rootComponent={<Comp />} />
+              </div>
+            );
+          })}
+        </main>
+      </div>
 
-        <div style={{ display: "flex", gap: "var(--space-2)" }}>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="输入名字..."
-            style={{
-              padding: "var(--space-2) var(--space-3)",
-              borderRadius: "var(--radius-sm)",
-              border: "1px solid var(--border)",
-              fontFamily: "var(--font-body)",
-              fontSize: "var(--text-sm)",
-            }}
-          />
-          <button
-            onClick={handleGreet}
-            style={{
-              padding: "var(--space-2) var(--space-4)",
-              borderRadius: "var(--radius-sm)",
-              background: "var(--accent)",
-              color: "var(--accent-on)",
-              fontSize: "var(--text-sm)",
-              fontWeight: 500,
-            }}
-          >
-            Greet
-          </button>
-        </div>
+      {/* Status bar */}
+      <StatusBar onSettingsClick={() => setSettingsOpen(true)} />
 
-        {greeting && (
-          <p
-            style={{
-              padding: "var(--space-3)",
-              background: "var(--bg)",
-              borderRadius: "var(--radius-md)",
-              boxShadow: "var(--elev-ring)",
-            }}
-          >
-            ✓ Front→Back: {greeting}
-          </p>
-        )}
-        {backendEvent && (
-          <p
-            style={{
-              padding: "var(--space-3)",
-              background: "var(--bg)",
-              borderRadius: "var(--radius-md)",
-              boxShadow: "var(--elev-ring)",
-            }}
-          >
-            ✓ Back→Front: {backendEvent}
-          </p>
-        )}
-      </main>
+      {/* Quick Capture Modal — always mounted at top level */}
+      <QuickCaptureModal open={quickCaptureOpen} onClose={closeQuickCapture} />
+
+      {/* Settings Modal */}
+      <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+
+      {/* Toast notifications */}
+      <ToastContainer />
     </div>
   );
 }
