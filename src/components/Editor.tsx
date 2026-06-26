@@ -89,7 +89,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       }),
       ReferenceChip,
     ],
-    content: deserializeReferenceChips(content, existingFragmentIds),
+    content: deserializeReferenceChips(content || '', existingFragmentIds),
     onUpdate: ({ editor: ed }) => {
       // Word count
       const text = ed.getText();
@@ -154,7 +154,7 @@ const Editor = forwardRef<EditorHandle, EditorProps>(function Editor(
       },
       setContent: (html: string) => {
         if (editor) {
-          editor.commands.setContent(deserializeReferenceChips(html, existingFragmentIds));
+          editor.commands.setContent(deserializeReferenceChips(html || '', existingFragmentIds));
         }
       },
       getEditor: () => editor ?? null,

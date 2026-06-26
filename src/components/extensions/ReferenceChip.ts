@@ -121,6 +121,7 @@ export default ReferenceChip;
  * Used when converting editor content to markdown for saving.
  */
 export function serializeReferenceChips(html: string): string {
+  if (!html) return '';
   // Replace <span class="ref-chip" data-fragment-id="xxx">@xxx</span> with @[xxx]
   return html.replace(
     /<span[^>]*class="ref-chip[^"]*"[^>]*data-fragment-id="([^"]+)"[^>]*>[^<]*<\/span>/g,
@@ -136,6 +137,7 @@ export function deserializeReferenceChips(
   markdown: string,
   existingIds?: Set<string>,
 ): string {
+  if (!markdown) return '';
   return markdown.replace(/@\[([a-f0-9]{8})\]/g, (_match, id: string) => {
     const invalid = existingIds ? !existingIds.has(id) : false;
     const cls = invalid ? 'ref-chip invalid' : 'ref-chip';
