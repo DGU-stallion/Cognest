@@ -1,0 +1,206 @@
+/* ── GenerationBar Styles ──────────────── */
+
+.generation-bar-wrapper {
+  margin-bottom: var(--space-6);
+}
+
+/* Input bar row */
+.generation-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4);
+  transition: border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+.generation-bar:focus-within {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+.generation-bar-icon {
+  font-size: var(--text-lg);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.generation-bar-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--fg);
+  min-width: 0;
+}
+
+.generation-bar-input::placeholder {
+  color: var(--meta);
+}
+
+.generation-bar-input:disabled {
+  opacity: 0.6;
+}
+
+.generation-bar-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--accent-on);
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  min-width: 56px;
+  min-height: 34px;
+  transition: background var(--motion-fast) var(--ease-standard),
+    opacity var(--motion-fast) var(--ease-standard);
+}
+
+.generation-bar-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.generation-bar-btn:active:not(:disabled) {
+  background: var(--accent-active);
+}
+
+.generation-bar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Spinner */
+.generation-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: generation-spin 0.6s linear infinite;
+}
+
+@keyframes generation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Error state */
+.generation-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: color-mix(in oklab, var(--danger), transparent 92%);
+  border: 1px solid color-mix(in oklab, var(--danger), transparent 75%);
+  border-radius: var(--radius-sm);
+}
+
+.generation-error svg {
+  width: 18px;
+  height: 18px;
+  color: var(--danger);
+  flex-shrink: 0;
+}
+
+.generation-error-text {
+  flex: 1;
+  font-size: var(--text-sm);
+  color: var(--danger);
+  line-height: var(--leading-body);
+}
+
+.generation-retry-btn {
+  flex-shrink: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--danger);
+  background: transparent;
+  border: 1px solid color-mix(in oklab, var(--danger), transparent 60%);
+  border-radius: var(--radius-sm);
+  padding: 4px 12px;
+  transition: background var(--motion-fast) var(--ease-standard);
+}
+
+.generation-retry-btn:hover {
+  background: color-mix(in oklab, var(--danger), transparent 85%);
+}
+
+/* Generated view result */
+.generation-result {
+  margin-top: var(--space-4);
+  background: var(--bg);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.generation-result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.generation-result-title {
+  font: 500 var(--text-base) / 1.3 var(--font-display);
+  letter-spacing: -0.01em;
+  color: var(--fg);
+}
+
+.generation-result-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.generation-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-sm);
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  transition: background var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.generation-action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.generation-pin-btn {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent), transparent 92%);
+}
+
+.generation-pin-btn:hover {
+  background: color-mix(in oklab, var(--accent), transparent 85%);
+}
+
+.generation-clear-btn {
+  color: var(--muted);
+  background: var(--surface);
+}
+
+.generation-clear-btn:hover {
+  color: var(--fg-2);
+  background: var(--border-soft);
+}
+
+.generation-result-body {
+  padding: var(--space-5);
+}

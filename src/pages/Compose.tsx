@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
+import { marked } from 'marked';
 import { useComposeStore } from '../stores/composeStore';
 import type { Fragment } from '../stores/captureStore';
 import type { EditorHandle } from '../components/Editor';
 import Editor from '../components/Editor';
+import { WritingPanel } from '../components/WritingPanel';
 import './Compose.css';
 
 type RefTab = 'inspirations' | 'topics' | 'articles';
@@ -97,15 +100,41 @@ export default function Compose() {
   const leftPanel = useResizable(280, 180, 400);
   const rightPanel = useResizable(320, 200, 500);
 
-  // Load related fragments on mount
+  // Load related fragments reactively based on article content
   useEffect(() => {
-    loadRelated();
+    loadRelated(bodyContent || title);
   }, [loadRelated]);
 
+  // Re-load related when content changes (debounced)
+  useEffect(() => {
+    if (!bodyContent && !title) return;
+    const timer = setTimeout(() => {
+      loadRelated(bodyContent || title);
+    }, 2000); // 2s debounce to avoid excessive reloading
+    return () => clearTimeout(timer);
+  }, [bodyContent, title, loadRelated]);
+
+  // Refresh related fragments when a fragment is deleted or index is updated
+  useEffect(() => {
+    const handleFragmentDeleted = () => { loadRelated(bodyContent || title); };
+    window.addEventListener('fragment-deleted', handleFragmentDeleted);
+
+    let unlisten: (() => void) | undefined;
+    listen('index_updated', () => { loadRelated(bodyContent || title); }).then((fn) => { unlisten = fn; });
+
+    return () => {
+      window.removeEventListener('fragment-deleted', handleFragmentDeleted);
+      unlisten?.();
+    };
+  }, [loadRelated, bodyContent, title]);
+
   // When currentArticleId changes and bodyContent is loaded, push it into the editor
+  // Convert markdown to HTML if the content looks like raw markdown
   useEffect(() => {
     if (currentArticleId && !loading && bodyContent !== undefined && editorRef.current) {
-      editorRef.current.setContent(bodyContent);
+      const isMarkdown = bodyContent.startsWith('#') || bodyContent.includes('\n#') || bodyContent.includes('**');
+      const html = isMarkdown ? (marked.parse(bodyContent) as string) : bodyContent;
+      editorRef.current.setContent(html);
     }
   }, [currentArticleId, bodyContent, loading]);
 
@@ -279,13 +308,6 @@ export default function Compose() {
           </div>
         )}
         <div className="editor-toolbar">
-          <button title="新建文章 (⌘N)" onClick={handleNewArticle} className="new-article-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            新建
-          </button>
-          <div className="sep" />
           <button title="加粗" onClick={handleBold}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <path d="M6 4h8a4 4 0 014 4 4 4 0 01-4 4H6zM6 12h9a4 4 0 014 4 4 4 0 01-4 4H6z" />
@@ -351,15 +373,7 @@ export default function Compose() {
 
       {/* Right: AI panel */}
       <div className="ai-side" style={{ width: rightPanel.width, flexShrink: 0 }}>
-        <div className="ai-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4" />
-          </svg>
-          <span>Writing Agent</span>
-        </div>
-        <div className="ai-placeholder">
-          <p>AI 辅助将在后续版本启用</p>
-        </div>
+        <WritingPanel />
       </div>
     </div>
   );

@@ -55,6 +55,24 @@ log = "0.4"
 # Platform directories
 dirs = "5"
 
+# AI / Embedding
+fastembed = "4"
+
+# macOS Keychain
+security-framework = "3"
+
+# Encryption (AES-256-GCM for settings file)
+aes-gcm = "0.10"
+rand = "0.8"
+
+# HTTP client (LLM API calls)
+reqwest = { version = "0.12", features = ["json", "stream"] }
+bytes = "1"
+
+# Streaming
+futures = "0.3"
+tokio-stream = "0.1"
+
 [dev-dependencies]
 tempfile = "3"
 proptest = "1"

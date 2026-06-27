@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useViewStackStore } from '../stores/viewStackStore';
+import DiscoverDetail from '../pages/DiscoverDetail';
 import './ViewStack.css';
 
 interface ViewStackProps {
@@ -121,20 +122,16 @@ export default function ViewStack({ pageId, rootComponent }: ViewStackProps) {
   );
 }
 
-/**
- * ViewPlaceholder renders a placeholder for pushed views.
- * In a real implementation, this would resolve the component string
- * to actual React components. For now it renders the component name and props.
- */
 function ViewPlaceholder({ entry }: { entry: { id: string; component: string; props: Record<string, unknown> } }) {
-  return (
-    <div style={{ padding: 'var(--space-8) var(--space-6)', paddingTop: 'calc(var(--space-12) + var(--space-4))' }}>
-      <div style={{ fontSize: 'var(--text-sm)', color: 'var(--meta)' }}>
-        视图: {entry.component}
-      </div>
-      <div style={{ fontSize: 'var(--text-xs)', color: 'var(--meta)', marginTop: 'var(--space-2)' }}>
-        ID: {entry.id}
-      </div>
-    </div>
-  );
+  // Resolve component by name
+  switch (entry.component) {
+    case 'DiscoverDetail':
+      return <DiscoverDetail {...(entry.props as any)} />;
+    default:
+      return (
+        <div style={{ padding: '48px 24px', textAlign: 'center', color: 'var(--muted)' }}>
+          <p>未知视图: {entry.component}</p>
+        </div>
+      );
+  }
 }

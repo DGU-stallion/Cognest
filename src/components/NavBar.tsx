@@ -1,31 +1,10 @@
-import { useAppStore } from '../stores/appStore';
-import { useViewStackStore } from '../stores/viewStackStore';
 import './NavBar.css';
 
+/**
+ * NavBar is now empty — back/forward navigation buttons have moved
+ * into the Sidebar's window controls area (near macOS traffic lights).
+ * This component is kept as a thin visual separator.
+ */
 export default function NavBar() {
-  const { currentPage } = useAppStore();
-  const { stacks, pop } = useViewStackStore();
-
-  const stack = stacks[currentPage] ?? [];
-  const canGoBack = stack.length > 0;
-
-  return (
-    <div className="nav-bar">
-      <button
-        className="nav-btn"
-        disabled={!canGoBack}
-        onClick={() => pop(currentPage)}
-        title="返回"
-      >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M15 18l-6-6 6-6" />
-        </svg>
-      </button>
-      <button className="nav-btn" disabled title="前进">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M9 18l6-6-6-6" />
-        </svg>
-      </button>
-    </div>
-  );
+  return <div className="nav-bar" />;
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import Markdown from 'react-markdown';
 import { useArticlesStore } from '../stores/articlesStore';
 import { useComposeStore } from '../stores/composeStore';
 import { useAppStore } from '../stores/appStore';
@@ -372,51 +373,11 @@ function ArticlePreview({ article, content }: { article: Article; content: strin
           {article.tags.map(tag => <span key={tag} className="ar-tag">{tag}</span>)}
         </div>
       )}
-      <div className="preview-body" dangerouslySetInnerHTML={{ __html: content || '' }} />
+      <div className="preview-body preview-markdown">
+        <Markdown>{content || ''}</Markdown>
+      </div>
     </div>
   );
 }
 
-// ─── Markdown renderer ────────────────────────────────────────────────────────
-
-function renderMarkdown(md: string): string {
-  if (!md) return '';
-  const lines = md.split('\n');
-  let html = '';
-  let inBlockquote = false;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed === '') {
-      if (inBlockquote) { html += '</blockquote>'; inBlockquote = false; }
-      continue;
-    }
-    const hm = trimmed.match(/^(#{1,6})\s+(.+)$/);
-    if (hm) {
-      if (inBlockquote) { html += '</blockquote>'; inBlockquote = false; }
-      html += `<h${hm[1].length + 2}>${esc(hm[2])}</h${hm[1].length + 2}>`;
-      continue;
-    }
-    if (trimmed.startsWith('>')) {
-      if (!inBlockquote) { html += '<blockquote>'; inBlockquote = true; }
-      html += esc(trimmed.slice(1).trim()) + ' ';
-      continue;
-    }
-    if (inBlockquote) { html += '</blockquote>'; inBlockquote = false; }
-    html += `<p>${fmt(trimmed)}</p>`;
-  }
-  if (inBlockquote) html += '</blockquote>';
-  return html;
-}
-
-function fmt(t: string) {
-  let r = esc(t);
-  r = r.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  r = r.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  r = r.replace(/`(.+?)`/g, '<code>$1</code>');
-  return r;
-}
-
-function esc(s: string) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
+// ─── (Markdown rendering now handled by react-markdown in ArticlePreview) ────

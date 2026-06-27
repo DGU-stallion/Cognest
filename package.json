@@ -17,8 +17,13 @@
     "@tiptap/pm": "^3.27.1",
     "@tiptap/react": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
+    "@xyflow/react": "^12.11.1",
+    "marked": "^18.0.5",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
+    "marked": "^15.0.0",
+    "react-markdown": "^10.1.0",
+    "recharts": "^3.9.0",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

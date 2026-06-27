@@ -20,6 +20,7 @@ export interface CaptureState {
   loadFragments: () => Promise<void>;
   setFilter: (filter: FragmentFilter) => void;
   addFragment: (content: string) => Promise<string>;
+  deleteFragment: (id: string) => Promise<void>;
 }
 
 export const useCaptureStore = create<CaptureState>((set, get) => ({
@@ -54,5 +55,13 @@ export const useCaptureStore = create<CaptureState>((set, get) => ({
     // Reload after creation
     await get().loadFragments();
     return id;
+  },
+
+  deleteFragment: async (id: string) => {
+    await invoke('delete_fragment', { id });
+    // Reload after deletion
+    await get().loadFragments();
+    // Notify other pages (e.g. Compose) that a fragment was deleted
+    window.dispatchEvent(new Event('fragment-deleted'));
   },
 }));

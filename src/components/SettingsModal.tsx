@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { AISettingsTab } from './AISettingsTab';
 import './SettingsModal.css';
 
 interface SettingsModalProps {
@@ -7,7 +8,7 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-type SettingsTab = 'account' | 'shortcuts' | 'vault' | 'plugins';
+type SettingsTab = 'account' | 'shortcuts' | 'vault' | 'ai' | 'plugins';
 
 const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
   {
@@ -38,6 +39,16 @@ const TABS: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
         <path d="M3 4h12v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4z" />
         <path d="M3 4V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1" />
         <path d="M7 8h4" />
+      </svg>
+    ),
+  },
+  {
+    id: 'ai',
+    label: 'AI 模型',
+    icon: (
+      <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="9" cy="9" r="3" />
+        <path d="M9 2v2M9 14v2M2 9h2M14 9h2M4.2 4.2l1.4 1.4M12.4 12.4l1.4 1.4M4.2 13.8l1.4-1.4M12.4 5.6l1.4-1.4" />
       </svg>
     ),
   },
@@ -166,6 +177,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               articleCount={articleCount}
             />
           )}
+          {activeTab === 'ai' && <AISettingsTab />}
           {activeTab === 'plugins' && <PluginsTab />}
         </div>
       </div>

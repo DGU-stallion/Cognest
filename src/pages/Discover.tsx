@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { listen } from '@tauri-apps/api/event';
 import { useDiscoverStore } from '../stores/discoverStore';
 import type { FeedCard } from '../stores/discoverStore';
 import { useViewStackStore } from '../stores/viewStackStore';
+import { useViewStore } from '../stores/viewStore';
+import { GenerationBar } from '../components/GenerationBar';
+import { ViewRenderer } from '../components/ViewRenderer';
 import './Discover.css';
 
 /** Format today's date as "2026年6月24日 · 周二" style */
@@ -17,10 +21,29 @@ function formatDateEyebrow(): string {
 
 export default function Discover() {
   const { cards, dismissedCards, loading, loadCards, dismissCard } = useDiscoverStore();
+  const { pinnedViews, loadPinnedViews, unpinView } = useViewStore();
 
   useEffect(() => {
     loadCards();
-  }, [loadCards]);
+    loadPinnedViews();
+  }, [loadCards, loadPinnedViews]);
+
+  // Listen for new_feed_card Tauri event → refresh pinned views & feed cards
+  useEffect(() => {
+    let unmounted = false;
+
+    const unlistenPromise = listen('new_feed_card', () => {
+      if (!unmounted) {
+        loadPinnedViews();
+        loadCards();
+      }
+    });
+
+    return () => {
+      unmounted = true;
+      unlistenPromise.then((fn) => fn());
+    };
+  }, [loadPinnedViews, loadCards]);
 
   // Visible cards (not dismissed)
   const visibleCards = cards.filter((c) => !dismissedCards.has(c.id));
@@ -31,6 +54,9 @@ export default function Discover() {
   const statsCard = cards.find((c) => c.type === 'stats');
   const isEmpty = hasNoData || (!loading && !statsCard);
 
+  // Check if there's any content at all (pinned views count as content)
+  const hasPinnedViews = pinnedViews.length > 0;
+
   return (
     <div className="discover-feed">
       {/* Header */}
@@ -40,6 +66,19 @@ export default function Discover() {
         <p>规则引擎正在帮你整理碎片、发现模式。这里是本周的洞察。</p>
       </div>
 
+      {/* AI View Generation */}
+      <GenerationBar />
+
+      {/* Pinned Views Section */}
+      {hasPinnedViews && (
+        <div className="pinned-views-section">
+          <h2 className="pinned-views-title">固定视图</h2>
+          {pinnedViews.map((view) => (
+            <PinnedViewCard key={view.id} view={view} onUnpin={unpinView} />
+          ))}
+        </div>
+      )}
+
       {/* Loading state */}
       {loading && (
         <div className="discover-empty">
@@ -48,7 +87,7 @@ export default function Discover() {
       )}
 
       {/* Empty state */}
-      {isEmpty && !loading && (
+      {isEmpty && !loading && !hasPinnedViews && (
         <div className="discover-empty">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <circle cx="11" cy="11" r="7" />
@@ -65,6 +104,43 @@ export default function Discover() {
     </div>
   );
 }
+
+// ─── Pinned View Card ─────────────────────────────────────────────────────────
+
+interface PinnedViewCardProps {
+  view: import('../stores/viewStore').ViewSpec;
+  onUnpin: (viewId: string) => Promise<void>;
+}
+
+function PinnedViewCard({ view, onUnpin }: PinnedViewCardProps) {
+  const handleUnpin = useCallback(() => {
+    onUnpin(view.id);
+  }, [view.id, onUnpin]);
+
+  return (
+    <div className="discover-card pinned-view-card">
+      <div className="card-top">
+        <span className="card-kind">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M12 2v8m0 0l4-3m-4 3l-4-3M5 21l7-4 7 4V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16z" />
+          </svg>
+          {view.type === 'summary' ? '回顾' : '视图'}
+        </span>
+        <button className="card-dismiss" onClick={handleUnpin} title="取消固定" aria-label="取消固定视图">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <h3>{view.title}</h3>
+      <div className="pinned-view-body">
+        <ViewRenderer spec={view} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Feed Card Item ───────────────────────────────────────────────────────────
 
 interface FeedCardItemProps {
   card: FeedCard;

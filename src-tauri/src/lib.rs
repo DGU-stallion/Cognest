@@ -5,10 +5,16 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use commands::AppState;
+use commands::ai::AiState;
 use tauri::{Emitter, Manager};
 
+use crate::core::agents::reflection::{ReflectionAgent, ReflectionScheduler};
+use crate::core::embedding::EmbeddingEngine;
 use crate::core::index::IndexDb;
+use crate::core::jobs::{JobQueue, WorkerContext};
+use crate::core::llm::LlmGateway;
 use crate::core::repo::FileRepo;
+use crate::core::settings::SettingsManager;
 use crate::core::watcher;
 
 /// Determine the vault path. For now uses ~/CognestVault as default.
@@ -127,7 +133,7 @@ pub fn run() {
             let index_arc = app_state.index_arc.clone();
             let watcher_handle = app.handle().clone();
 
-            match watcher::start_watcher(vault_path, index_arc, watcher_handle) {
+            match watcher::start_watcher(vault_path.clone(), index_arc.clone(), watcher_handle) {
                 Ok(handle) => {
                     // Store the watcher handle to keep it alive for the app lifetime
                     app.manage(handle);
@@ -137,6 +143,224 @@ pub fn run() {
                     log::error!("文件监听器启动失败: {}", e);
                 }
             }
+
+            // ─── AI Subsystem Initialization ────────────────────────────────
+            log::info!("正在初始化 AI 子系统…");
+
+            // 1. SettingsManager
+            let settings_manager = SettingsManager::new(&vault_path);
+            let settings = Arc::new(Mutex::new(settings_manager));
+
+            // 2. EmbeddingEngine (failure is non-fatal — AI is optional)
+            let model_dir = vault_path.join(".cognest").join("models");
+            let vectors_bin_path = vault_path.join(".cognest").join("vectors.bin");
+            let _ = std::fs::create_dir_all(&model_dir);
+
+            let embedding = match EmbeddingEngine::new(&model_dir, &vectors_bin_path) {
+                Ok(engine) => {
+                    log::info!("EmbeddingEngine 初始化成功");
+                    Arc::new(Mutex::new(engine))
+                }
+                Err(e) => {
+                    log::error!(
+                        "EmbeddingEngine 初始化失败 (AI 功能不可用): {}",
+                        e
+                    );
+                    // AI is optional — skip entire AI subsystem initialization.
+                    // The app continues to function without AI features.
+                    log::info!("AI 子系统跳过初始化，应用正常运行");
+                    return Ok(());
+                }
+            };
+
+            // 3. LlmGateway
+            let llm = {
+                let settings_guard = settings.lock().expect("无法获取 settings 锁");
+                match LlmGateway::from_config(&settings_guard) {
+                    Ok(gateway) => {
+                        log::info!("LlmGateway 初始化成功");
+                        Arc::new(Mutex::new(gateway))
+                    }
+                    Err(e) => {
+                        log::info!(
+                            "LlmGateway 初始化为空 (未配置 Provider): {}",
+                            e
+                        );
+                        // Create an empty gateway — NoProvider errors will be returned on use
+                        Arc::new(Mutex::new(LlmGateway::empty()))
+                    }
+                }
+            };
+
+            // 4. JobQueue — reuse the SQLite connection from AppState
+            let db_path = vault_path.join(".cognest").join("index.sqlite");
+            let job_db = Arc::new(Mutex::new(
+                rusqlite::Connection::open(&db_path)
+                    .expect("无法打开 SQLite 数据库 (job queue)"),
+            ));
+
+            let app_handle_for_emitter = app.handle().clone();
+            let event_emitter: Box<dyn Fn(&str, &str) + Send + Sync> =
+                Box::new(move |event: &str, payload: &str| {
+                    let _ = app_handle_for_emitter.emit(event, payload.to_string());
+                });
+
+            let job_queue = Arc::new(JobQueue::new(job_db, event_emitter));
+            log::info!("JobQueue 初始化成功");
+
+            // 5. Create AiState and manage it
+            let ai_state = AiState {
+                embedding: embedding.clone(),
+                llm: llm.clone(),
+                jobs: job_queue.clone(),
+                settings: settings.clone(),
+            };
+            app.manage(ai_state);
+            log::info!("AiState 已注册到 Tauri");
+
+            // ─── Background Threads ─────────────────────────────────────────
+
+            // Thread 1: Embedding batch processing — polls for unembedded fragments
+            let emb_thread_embedding = embedding.clone();
+            let emb_thread_index = index_arc.clone();
+            let emb_thread_jobs = job_queue.clone();
+            std::thread::spawn(move || {
+                log::info!("Embedding 后台批处理线程启动");
+                loop {
+                    std::thread::sleep(std::time::Duration::from_secs(30));
+
+                    // Get all fragment IDs from the index
+                    let all_ids = {
+                        let idx = match emb_thread_index.lock() {
+                            Ok(idx) => idx,
+                            Err(_) => continue,
+                        };
+                        match idx.all_fragment_ids() {
+                            Ok(ids) => ids,
+                            Err(_) => continue,
+                        }
+                    };
+
+                    if all_ids.is_empty() {
+                        continue;
+                    }
+
+                    // Find unembedded fragments
+                    let unembedded = {
+                        let engine = match emb_thread_embedding.lock() {
+                            Ok(e) => e,
+                            Err(_) => continue,
+                        };
+                        engine.find_unembedded(&all_ids)
+                    };
+
+                    if unembedded.is_empty() {
+                        continue;
+                    }
+
+                    log::info!("发现 {} 个未计算向量的碎片，开始批处理", unembedded.len());
+
+                    // Read content for each unembedded fragment and compute embeddings
+                    for frag_id in &unembedded {
+                        let content = {
+                            let idx = match emb_thread_index.lock() {
+                                Ok(idx) => idx,
+                                Err(_) => break,
+                            };
+                            idx.get_fragment_content(frag_id).unwrap_or_else(|_| String::new())
+                        };
+
+                        if content.is_empty() {
+                            continue;
+                        }
+
+                        let mut engine = match emb_thread_embedding.lock() {
+                            Ok(e) => e,
+                            Err(_) => break,
+                        };
+
+                        match engine.embed_text(&content) {
+                            Ok(vector) => {
+                                if let Err(e) = engine.store_vector(frag_id, &vector) {
+                                    log::error!(
+                                        "存储向量失败 (fragment {}): {}",
+                                        frag_id,
+                                        e
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                log::error!(
+                                    "计算向量失败 (fragment {}): {}",
+                                    frag_id,
+                                    e
+                                );
+                            }
+                        }
+                    }
+
+                    // After embedding, enqueue curator classify jobs for newly embedded fragments
+                    for frag_id in &unembedded {
+                        let payload = serde_json::json!({
+                            "fragment_id": frag_id
+                        });
+                        if let Err(e) = emb_thread_jobs.enqueue(
+                            crate::core::jobs::JobType::CuratorClassify,
+                            payload,
+                        ) {
+                            log::error!("入队 curator_classify 失败: {}", e);
+                        }
+                    }
+                }
+            });
+
+            // Thread 2 & 3: JobQueue workers (recover on startup + start workers)
+            let recovered = job_queue.recover_on_startup().unwrap_or_else(|e| {
+                log::error!("JobQueue 恢复失败: {}", e);
+                0
+            });
+            if recovered > 0 {
+                log::info!("JobQueue 恢复了 {} 个中断的 job", recovered);
+            }
+
+            let repo_for_workers = Arc::new(Mutex::new(FileRepo::new(vault_path.clone())));
+            let worker_context = Arc::new(WorkerContext {
+                embedding: embedding.clone(),
+                llm: llm.clone(),
+                repo: repo_for_workers,
+                index: index_arc.clone(),
+            });
+            job_queue.start_workers(worker_context.clone());
+            log::info!("JobQueue worker 线程已启动");
+
+            // Thread 4: ReflectionScheduler
+            let scheduler = ReflectionScheduler::new(job_queue.clone());
+            scheduler.start();
+            log::info!("ReflectionScheduler 线程已启动");
+
+            // Check for missed reviews on startup
+            let missed_review_context = worker_context.clone();
+            let missed_review_jobs = job_queue.clone();
+            std::thread::spawn(move || {
+                let agent = ReflectionAgent;
+                match agent.check_missed_reviews(&*missed_review_context) {
+                    Ok(missed) => {
+                        for job_type in missed {
+                            let payload = serde_json::json!({
+                                "job_type": format!("{:?}", job_type)
+                            });
+                            if let Err(e) = missed_review_jobs.enqueue(job_type, payload) {
+                                log::error!("入队遗漏回顾失败: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("检查遗漏回顾失败: {}", e);
+                    }
+                }
+            });
+
+            log::info!("AI 子系统初始化完成");
 
             Ok(())
         })
@@ -165,6 +389,7 @@ pub fn run() {
             commands::list_fragments,
             commands::search_fragments,
             commands::update_fragment,
+            commands::delete_fragment,
             commands::create_article,
             commands::get_article,
             commands::save_article,
@@ -179,6 +404,22 @@ pub fn run() {
             commands::get_counts,
             commands::get_vault_path,
             commands::get_initial_data,
+            // AI commands
+            commands::ai::get_embedding_status,
+            commands::ai::find_similar_fragments,
+            commands::ai::writing_chat,
+            commands::ai::writing_stream_chat,
+            commands::ai::writing_recommend,
+            commands::ai::generate_view,
+            commands::ai::pin_view,
+            commands::ai::list_pinned_views,
+            commands::ai::get_ai_settings,
+            commands::ai::save_ai_settings,
+            commands::ai::validate_provider,
+            commands::ai::list_ollama_models,
+            commands::ai::list_jobs,
+            commands::ai::cancel_job,
+            commands::ai::get_audit_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

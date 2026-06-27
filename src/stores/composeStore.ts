@@ -2,6 +2,29 @@ import { create } from 'zustand';
 import { invoke } from '@tauri-apps/api/core';
 import type { Fragment } from './captureStore';
 
+/** Extract keywords from article text for relevance matching */
+function extractKeywords(text: string): string[] {
+  // Split on common delimiters, filter short words
+  return text
+    .replace(/[#*_`>~\[\](){}|\\\/\-=+]/g, ' ')
+    .split(/\s+/)
+    .filter(w => w.length >= 2)
+    .map(w => w.toLowerCase());
+}
+
+/** Compute a simple relevance score for a fragment against keywords */
+function computeRelevanceScore(fragment: Fragment, keywords: string[]): number {
+  let score = 0;
+  const content = fragment.content.toLowerCase();
+  const tags = fragment.tags.map(t => t.toLowerCase());
+
+  for (const kw of keywords) {
+    if (content.includes(kw)) score += 1;
+    if (tags.some(t => t.includes(kw))) score += 3; // Tag matches are stronger
+  }
+  return score;
+}
+
 export type ArticleStatus = 'draft' | 'archived';
 
 export interface ArticleMeta {
@@ -39,7 +62,7 @@ export interface ComposeState {
   setTitle: (title: string) => void;
   setWordCount: (count: number) => void;
   cycleStatus: () => void;
-  loadRelated: () => Promise<void>;
+  loadRelated: (articleContent?: string) => Promise<void>;
   loadArticle: (id: string) => Promise<void>;
   saveArticle: (html: string) => Promise<void>;
   createNewArticle: () => Promise<void>;
@@ -83,14 +106,28 @@ export const useComposeStore = create<ComposeState>((set, get) => ({
     set({ status: next });
   },
 
-  loadRelated: async () => {
+  loadRelated: async (articleContent?: string) => {
     try {
       const fragments = await invoke<Fragment[]>('list_fragments', {
         filter: 'all',
         offset: 0,
-        limit: 50,
+        limit: 200,
       });
-      set({ relatedFragments: fragments });
+
+      if (articleContent && articleContent.trim()) {
+        // Sort fragments by relevance to current article content
+        // Simple keyword matching: fragments whose tags or content overlap with article text
+        const keywords = extractKeywords(articleContent);
+        const scored = fragments.map(f => ({
+          fragment: f,
+          score: computeRelevanceScore(f, keywords),
+        }));
+        scored.sort((a, b) => b.score - a.score);
+        set({ relatedFragments: scored.map(s => s.fragment) });
+      } else {
+        // No article content yet — show recent fragments
+        set({ relatedFragments: fragments });
+      }
     } catch (e) {
       console.error('Failed to load related fragments:', e);
     }

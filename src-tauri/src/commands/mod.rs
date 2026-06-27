@@ -3,6 +3,8 @@
 // Thin #[tauri::command] functions that serialize/forward to Core modules.
 // No business logic lives here — only state extraction, deserialization, and forwarding.
 
+pub mod ai;
+
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
@@ -115,6 +117,19 @@ pub fn update_fragment(
     let repo = state.repo.lock().map_err(|e| e.to_string())?;
     repo.update_fragment_content(&id, &content)
         .map_err(|e| e.to_string())
+}
+
+/// Delete a fragment by ID (removes file from disk + index record).
+#[tauri::command]
+pub fn delete_fragment(
+    state: State<'_, AppState>,
+    id: String,
+) -> Result<(), String> {
+    let repo = state.repo.lock().map_err(|e| e.to_string())?;
+    repo.delete_fragment(&id).map_err(|e| e.to_string())?;
+    let index = state.index.lock().map_err(|e| e.to_string())?;
+    index.delete_fragment(&id).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 // ─── Article Commands ────────────────────────────────────────────────────────

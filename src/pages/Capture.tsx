@@ -178,6 +178,7 @@ function FragmentItem({ fragment }: { fragment: Fragment }) {
   const isCategorized = fragment.topics.length > 0;
   const [editing, setEditing] = useState(false);
   const [editContent, setEditContent] = useState(fragment.content);
+  const { deleteFragment } = useCaptureStore();
 
   const handleStartEdit = useCallback(() => {
     setEditContent(fragment.content);
@@ -192,14 +193,20 @@ function FragmentItem({ fragment }: { fragment: Fragment }) {
     }
     try {
       await invoke('update_fragment', { id: fragment.id, content: trimmed });
-      // Update local state (fragment is from parent, will refresh on next load)
       setEditing(false);
-      // Trigger a reload of fragments
       useCaptureStore.getState().loadFragments();
     } catch (e) {
       console.error('Failed to update fragment:', e);
     }
   }, [editContent, fragment.id, fragment.content]);
+
+  const handleDelete = useCallback(async () => {
+    try {
+      await deleteFragment(fragment.id);
+    } catch (e) {
+      console.error('Failed to delete fragment:', e);
+    }
+  }, [fragment.id, deleteFragment]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -264,6 +271,11 @@ function FragmentItem({ fragment }: { fragment: Fragment }) {
               <circle cx="6" cy="12" r="3" />
               <circle cx="18" cy="6" r="3" />
               <path d="M8.6 10.5l6.3-3" />
+            </svg>
+          </button>
+          <button title="删除" onClick={handleDelete} className="frag-action-delete">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M3 6h18M8 6V4h8v2M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6" />
             </svg>
           </button>
         </div>

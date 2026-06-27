@@ -103,6 +103,9 @@ pub enum IndexError {
     #[error("索引损坏")]
     #[allow(dead_code)]
     Corrupted,
+
+    #[error("未找到: {0}")]
+    NotFound(String),
 }
 
 // ─── IndexDb Implementation ─────────────────────────────────────────────────
@@ -785,6 +788,29 @@ impl IndexDb {
             Ok(Some(row.get(0)?))
         } else {
             Ok(None)
+        }
+    }
+
+    /// Get all fragment IDs in the index.
+    pub fn all_fragment_ids(&self) -> Result<Vec<String>, IndexError> {
+        let mut stmt = self.conn.prepare("SELECT id FROM fragments")?;
+        let ids = stmt
+            .query_map([], |row| row.get::<_, String>(0))?
+            .filter_map(|r| r.ok())
+            .collect();
+        Ok(ids)
+    }
+
+    /// Get the content of a single fragment by ID.
+    pub fn get_fragment_content(&self, id: &str) -> Result<String, IndexError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT content FROM fragments WHERE id = ?1")?;
+        let mut rows = stmt.query(params![id])?;
+        if let Some(row) = rows.next()? {
+            Ok(row.get(0)?)
+        } else {
+            Err(IndexError::NotFound(format!("Fragment not found: {}", id)))
         }
     }
 }

@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useAppStore } from '../stores/appStore';
+import { useViewStackStore } from '../stores/viewStackStore';
 import './Sidebar.css';
 
 type AppPage = 'discover' | 'compose' | 'capture' | 'articles';
@@ -15,6 +16,22 @@ const STORAGE_KEY = 'cognest-sidebar-expanded';
 
 function formatCount(n: number): string {
   return n > 999 ? '999+' : String(n);
+}
+
+/** Generate stable heatmap data (seeded to avoid flicker) */
+function generateHeatmapData(): number[][] {
+  const seed = Math.floor(Date.now() / (7 * 24 * 3600 * 1000));
+  const weeks: number[][] = [];
+  let s = seed;
+  for (let w = 0; w < 16; w++) {
+    const week: number[] = [];
+    for (let d = 0; d < 7; d++) {
+      s = (s * 1103515245 + 12345) & 0x7fffffff;
+      week.push(s % 5);
+    }
+    weeks.push(week);
+  }
+  return weeks;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -66,20 +83,23 @@ interface SidebarProps {
 
 export default function Sidebar({ onQuickCapture }: SidebarProps) {
   const { currentPage, setCurrentPage, sidebarExpanded, setSidebarExpanded, counts } = useAppStore();
+  const { stacks, pop } = useViewStackStore();
 
-  // Persist sidebar state to localStorage
+  const stack = stacks[currentPage] ?? [];
+  const canGoBack = stack.length > 0;
+  const handleGoBack = () => pop(currentPage);
+
+  const heatmapData = useMemo(() => generateHeatmapData(), []);
+
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored !== null) {
-      setSidebarExpanded(stored === 'true');
-    }
+    if (stored !== null) setSidebarExpanded(stored === 'true');
   }, [setSidebarExpanded]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, String(sidebarExpanded));
   }, [sidebarExpanded]);
 
-  // ⌘\ keyboard shortcut to toggle sidebar
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === '\\') {
@@ -91,35 +111,46 @@ export default function Sidebar({ onQuickCapture }: SidebarProps) {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [sidebarExpanded, setSidebarExpanded]);
 
-  const toggleSidebar = () => {
-    setSidebarExpanded(!sidebarExpanded);
-  };
+  const toggleSidebar = () => setSidebarExpanded(!sidebarExpanded);
 
   return (
     <aside className={`sidebar${sidebarExpanded ? '' : ' collapsed'}`}>
-      {/* Brand */}
-      <div className="sidebar-brand">
-        <div className="sidebar-brand-mark">
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <path d="M9 1.5 1.5 5.25 9 9l7.5-3.75L9 1.5zM1.5 12.75 9 16.5l7.5-3.75M1.5 9 9 12.75 16.5 9" />
-          </svg>
-        </div>
-        <b className="sidebar-brand-text">Cognest</b>
+      {/* Window controls — top bar, centered, 1/3 each */}
+      <div className="sidebar-top-bar">
         <button
-          className="sidebar-toggle"
+          className="top-btn top-toggle"
           onClick={toggleSidebar}
-          title={sidebarExpanded ? '收起侧边栏' : '展开侧边栏'}
-          aria-label={sidebarExpanded ? '收起侧边栏' : '展开侧边栏'}
+          title={sidebarExpanded ? '收起侧边栏 ⌘\\' : '展开侧边栏 ⌘\\'}
         >
-          <svg viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5">
-            {sidebarExpanded ? (
-              <path d="M11.25 13.5 6.75 9l4.5-4.5" />
-            ) : (
-              <path d="M6.75 13.5 11.25 9 6.75 4.5" />
-            )}
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+            <rect x="2" y="2" width="12" height="12" rx="2" />
+            <path d="M6 2v12" />
+          </svg>
+        </button>
+        <button className="top-btn" disabled={!canGoBack} onClick={handleGoBack} title="返回">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M10 12 6 8l4-4" />
+          </svg>
+        </button>
+        <button className="top-btn" disabled title="前进">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <path d="M6 12l4-4-4-4" />
           </svg>
         </button>
       </div>
+
+      {/* Activity Heatmap — aligned with quick-capture below */}
+      {sidebarExpanded && (
+        <div className="sidebar-heatmap">
+          {heatmapData.map((week, wi) => (
+            <div key={wi} className="hm-col">
+              {week.map((level, di) => (
+                <div key={di} className={`hm-cell hm-${level}`} />
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Quick capture button */}
       <button className="sidebar-capture-btn" aria-label="快速记录" onClick={onQuickCapture}>
@@ -135,7 +166,6 @@ export default function Sidebar({ onQuickCapture }: SidebarProps) {
         {NAV_ITEMS.map((item) => {
           const isActive = currentPage === item.id;
           const count = item.countKey ? counts[item.countKey] : null;
-
           return (
             <button
               key={item.id}
@@ -145,9 +175,7 @@ export default function Sidebar({ onQuickCapture }: SidebarProps) {
             >
               <span className="nav-icon">{item.icon}</span>
               <span className="nav-label">{item.label}</span>
-              {count !== null && (
-                <span className="nav-count">{formatCount(count)}</span>
-              )}
+              {count !== null && <span className="nav-count">{formatCount(count)}</span>}
             </button>
           );
         })}

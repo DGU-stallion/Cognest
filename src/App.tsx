@@ -3,7 +3,6 @@ import { useAppStore } from './stores/appStore';
 import { useComposeStore } from './stores/composeStore';
 import { useStartup } from './hooks/useStartup';
 import Sidebar from './components/Sidebar';
-import NavBar from './components/NavBar';
 import ViewStack from './components/ViewStack';
 import StatusBar from './components/StatusBar';
 import QuickCaptureModal from './components/QuickCaptureModal';
@@ -73,7 +72,6 @@ function App() {
 
         {/* Main content area — ViewStack per page, only active page visible */}
         <main style={{ flex: 1, overflow: 'hidden', background: 'var(--surface-warm)', position: 'relative', display: 'flex', flexDirection: 'column' }}>
-          <NavBar />
           <div style={{ flex: 1, overflow: 'hidden', position: 'relative' }}>
             {PAGE_IDS.map((id) => {
               const Comp = PAGE_MAP[id];

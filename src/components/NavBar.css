@@ -1,36 +1,6 @@
-/* ── NavBar: browser-style ← → buttons ───────────────── */
+/* ── NavBar: minimal separator (buttons moved to Sidebar) ── */
 .nav-bar {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 4px 12px;
-  height: 28px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border-soft);
-  flex: 0 0 28px;
-}
-
-.nav-btn {
-  width: 24px;
-  height: 24px;
-  border-radius: var(--radius-sm);
-  display: grid;
-  place-items: center;
-  color: var(--fg-2);
-  transition: background var(--motion-fast), color var(--motion-fast);
-}
-
-.nav-btn:hover:not(:disabled) {
-  background: var(--bg);
-  color: var(--fg);
-}
-
-.nav-btn:disabled {
-  color: var(--border);
-  cursor: default;
-}
-
-.nav-btn svg {
-  width: 14px;
-  height: 14px;
+  height: 1px;
+  background: var(--border-soft);
+  flex: 0 0 1px;
 }

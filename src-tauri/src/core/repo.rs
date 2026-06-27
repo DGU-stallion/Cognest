@@ -76,6 +76,14 @@ impl FileRepo {
         Self { vault_path }
     }
 
+    /// Create a lightweight clone of this FileRepo for use in AI subsystem contexts.
+    /// Since FileRepo only holds a path, this is a cheap operation.
+    pub fn clone_for_ai(&self) -> Self {
+        Self {
+            vault_path: self.vault_path.clone(),
+        }
+    }
+
     /// Get a reference to the vault root path.
     pub fn vault_path(&self) -> &Path {
         &self.vault_path
@@ -242,6 +250,13 @@ impl FileRepo {
         let document = frontmatter::serialize(&parsed.meta, new_content)?;
         std::fs::write(&file_path, &document)?;
 
+        Ok(())
+    }
+
+    /// Delete a fragment file from disk.
+    pub fn delete_fragment(&self, id: &str) -> Result<(), RepoError> {
+        let file_path = self.find_fragment_path(id)?;
+        std::fs::remove_file(&file_path)?;
         Ok(())
     }
 

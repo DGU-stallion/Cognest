@@ -191,6 +191,11 @@
   height: 14px;
 }
 
+.frag-action-delete:hover {
+  color: var(--danger) !important;
+  background: color-mix(in oklab, var(--danger), transparent 90%) !important;
+}
+
 /* Empty state */
 .capture-empty {
   text-align: center;
