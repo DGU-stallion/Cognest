@@ -18,10 +18,12 @@
     "@tiptap/react": "^3.27.1",
     "@tiptap/starter-kit": "^3.27.1",
     "@xyflow/react": "^12.11.1",
-    "marked": "^18.0.5",
+    "ansi-to-react": "^6.2.6",
+    "markdown-it": "^14.2.0",
+    "marked": "^15.0.0",
+    "prosemirror-markdown": "^1.13.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "marked": "^15.0.0",
     "react-markdown": "^10.1.0",
     "recharts": "^3.9.0",
     "zustand": "^5.0.14"
@@ -29,6 +31,7 @@
   "devDependencies": {
     "@tauri-apps/cli": "^2.11.3",
     "@testing-library/react": "^16.3.2",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",

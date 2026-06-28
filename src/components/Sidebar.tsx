@@ -1,9 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { useAppStore } from '../stores/appStore';
-import { useViewStackStore } from '../stores/viewStackStore';
+import type { AppPage } from '../stores/appStore';
 import './Sidebar.css';
-
-type AppPage = 'discover' | 'compose' | 'capture' | 'articles';
 
 interface NavItem {
   id: AppPage;
@@ -82,12 +80,10 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ onQuickCapture }: SidebarProps) {
-  const { currentPage, setCurrentPage, sidebarExpanded, setSidebarExpanded, counts } = useAppStore();
-  const { stacks, pop } = useViewStackStore();
+  const { currentPage, setCurrentPage, sidebarExpanded, setSidebarExpanded, counts, canGoBack, canGoForward, goBack, goForward } = useAppStore();
 
-  const stack = stacks[currentPage] ?? [];
-  const canGoBack = stack.length > 0;
-  const handleGoBack = () => pop(currentPage);
+  const navigateBack = canGoBack();
+  const navigateForward = canGoForward();
 
   const heatmapData = useMemo(() => generateHeatmapData(), []);
 
@@ -127,12 +123,12 @@ export default function Sidebar({ onQuickCapture }: SidebarProps) {
             <path d="M6 2v12" />
           </svg>
         </button>
-        <button className="top-btn" disabled={!canGoBack} onClick={handleGoBack} title="返回">
+        <button className="top-btn" disabled={!navigateBack} onClick={goBack} title="返回">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M10 12 6 8l4-4" />
           </svg>
         </button>
-        <button className="top-btn" disabled title="前进">
+        <button className="top-btn" disabled={!navigateForward} onClick={goForward} title="前进">
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M6 12l4-4-4-4" />
           </svg>

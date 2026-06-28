@@ -64,7 +64,7 @@ export interface ComposeState {
   cycleStatus: () => void;
   loadRelated: (articleContent?: string) => Promise<void>;
   loadArticle: (id: string) => Promise<void>;
-  saveArticle: (html: string) => Promise<void>;
+  saveArticle: (body: string) => Promise<void>;
   createNewArticle: () => Promise<void>;
 }
 
@@ -161,7 +161,7 @@ export const useComposeStore = create<ComposeState>((set, get) => ({
     }
   },
 
-  saveArticle: async (html: string) => {
+  saveArticle: async (body: string) => {
     const { currentArticleId, title, status } = get();
     if (!currentArticleId) return;
     try {
@@ -170,7 +170,7 @@ export const useComposeStore = create<ComposeState>((set, get) => ({
         title,
         status,
         tags: [] as string[],
-        body: html,
+        body,
       });
       set({ updatedAt: new Date().toISOString() });
     } catch (e) {

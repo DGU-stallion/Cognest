@@ -57,7 +57,8 @@ const DEFAULT_COLORS = [
 function validateGraphData(data: unknown): data is GraphData {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
-  return Array.isArray(d.nodes) && Array.isArray(d.edges);
+  // Accept if nodes array exists (edges optional — some graphs may have none)
+  return Array.isArray(d.nodes);
 }
 
 function validateTimelineData(data: unknown): data is TimelineData {
@@ -86,6 +87,65 @@ function validateSummaryData(data: unknown): data is SummaryData {
   if (!data || typeof data !== 'object') return false;
   const d = data as Record<string, unknown>;
   return typeof d.markdown === 'string';
+}
+
+/**
+ * Try to coerce AI-generated view data into the expected format.
+ * AI often returns data in slightly different shapes — this normalizer
+ * handles common variations.
+ */
+function normalizeViewData(spec: ViewSpec): ViewSpec {
+  const data = spec.data as Record<string, unknown>;
+  if (!data) return spec;
+
+  switch (spec.type) {
+    case 'graph': {
+      // If nodes is missing but there's a top-level array, try to use it
+      if (!Array.isArray(data.nodes) && !Array.isArray(data.edges)) {
+        // Fallback: if data has markdown, treat as summary
+        if (typeof data.markdown === 'string') {
+          return { ...spec, type: 'summary', data: data as any };
+        }
+      }
+      // Ensure edges array exists
+      if (!Array.isArray(data.edges)) {
+        return { ...spec, data: { ...data, edges: [] } as any };
+      }
+      return spec;
+    }
+    case 'timeline':
+    case 'list': {
+      // If items is missing but data has markdown, downgrade to summary
+      if (!Array.isArray(data.items)) {
+        if (typeof data.markdown === 'string') {
+          return { ...spec, type: 'summary', data: data as any };
+        }
+        // Try to extract items from nested structure
+        if (Array.isArray(data.list)) {
+          return { ...spec, data: { items: data.list } as any };
+        }
+        // Last resort: show as summary with a message
+        return { ...spec, type: 'summary', data: { markdown: JSON.stringify(data, null, 2) } as any };
+      }
+      return spec;
+    }
+    case 'chart': {
+      if (!Array.isArray(data.series) && typeof data.markdown === 'string') {
+        return { ...spec, type: 'summary', data: data as any };
+      }
+      return spec;
+    }
+    case 'summary': {
+      // If markdown is missing, try to construct from available data
+      if (typeof data.markdown !== 'string') {
+        const content = data.content ?? data.text ?? JSON.stringify(data, null, 2);
+        return { ...spec, data: { markdown: String(content), stats: data.stats } as any };
+      }
+      return spec;
+    }
+    default:
+      return spec;
+  }
 }
 
 // ─── Error State ──────────────────────────────────────────────────────────────
@@ -434,69 +494,72 @@ export function ViewRenderer({ spec }: ViewRendererProps) {
     generateView(spec.query);
   }, [generateView, spec.query]);
 
+  // Normalize data before validation (handle AI format variations)
+  const normalizedSpec = useMemo(() => normalizeViewData(spec), [spec]);
+
   // Schema validation per type
-  switch (spec.type) {
+  switch (normalizedSpec.type) {
     case 'graph': {
-      if (!validateGraphData(spec.data)) {
+      if (!validateGraphData(normalizedSpec.data)) {
         return (
           <ErrorState
             message="图谱数据格式无效"
-            query={spec.query}
+            query={normalizedSpec.query}
             onRegenerate={handleRegenerate}
           />
         );
       }
-      return <GraphView data={spec.data} config={spec.config} />;
+      return <GraphView data={normalizedSpec.data} config={normalizedSpec.config} />;
     }
     case 'timeline': {
-      if (!validateTimelineData(spec.data)) {
+      if (!validateTimelineData(normalizedSpec.data)) {
         return (
           <ErrorState
             message="时间线数据格式无效"
-            query={spec.query}
+            query={normalizedSpec.query}
             onRegenerate={handleRegenerate}
           />
         );
       }
-      return <TimelineView data={spec.data} />;
+      return <TimelineView data={normalizedSpec.data} />;
     }
     case 'list': {
-      if (!validateListData(spec.data)) {
+      if (!validateListData(normalizedSpec.data)) {
         return (
           <ErrorState
             message="列表数据格式无效"
-            query={spec.query}
+            query={normalizedSpec.query}
             onRegenerate={handleRegenerate}
           />
         );
       }
-      return <ListView data={spec.data} />;
+      return <ListView data={normalizedSpec.data} />;
     }
     case 'chart': {
-      if (!validateChartData(spec.data)) {
+      if (!validateChartData(normalizedSpec.data)) {
         return (
           <ErrorState
             message="图表数据格式无效"
-            query={spec.query}
+            query={normalizedSpec.query}
             onRegenerate={handleRegenerate}
           />
         );
       }
-      return <ChartView data={spec.data} />;
+      return <ChartView data={normalizedSpec.data} />;
     }
     case 'summary': {
-      if (!validateSummaryData(spec.data)) {
+      if (!validateSummaryData(normalizedSpec.data)) {
         return (
           <ErrorState
             message="摘要数据格式无效"
-            query={spec.query}
+            query={normalizedSpec.query}
             onRegenerate={handleRegenerate}
           />
         );
       }
-      return <SummaryView data={spec.data} />;
+      return <SummaryView data={normalizedSpec.data} />;
     }
     default:
-      return <ErrorState message="不支持的视图类型" query={spec.query} onRegenerate={handleRegenerate} />;
+      return <ErrorState message="不支持的视图类型" query={normalizedSpec.query} onRegenerate={handleRegenerate} />;
   }
 }

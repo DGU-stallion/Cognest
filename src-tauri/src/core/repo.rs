@@ -276,7 +276,7 @@ impl FileRepo {
     }
 
     /// Find a fragment file by searching capture/**/<id>.md.
-    fn find_fragment_path(&self, id: &str) -> Result<PathBuf, RepoError> {
+    pub fn find_fragment_path(&self, id: &str) -> Result<PathBuf, RepoError> {
         let capture_dir = self.vault_path.join("capture");
         if !capture_dir.exists() {
             return Err(RepoError::FragmentNotFound(id.to_string()));

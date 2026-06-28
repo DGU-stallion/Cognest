@@ -36,7 +36,7 @@ import {
 const arbIsoDate = fc.date({
   min: new Date('2020-01-01T00:00:00Z'),
   max: new Date('2030-12-31T23:59:59Z'),
-}).map((d) => d.toISOString());
+}).filter((d) => !isNaN(d.getTime())).map((d) => d.toISOString());
 
 /** Generate a valid 8-char hex id */
 const arbHexId = fc.stringMatching(/^[a-f0-9]{8}$/);

@@ -503,6 +503,36 @@ impl IndexDb {
         Ok(sorted)
     }
 
+    /// Get all unique topic names across all fragments.
+    ///
+    /// Parses the JSON-encoded `topics` column and collects distinct values.
+    pub fn all_topics(&self) -> Result<Vec<String>, IndexError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT topics FROM fragments WHERE topics != '[]' AND topics != ''",
+        )?;
+
+        let mut unique_topics: Vec<String> = Vec::new();
+
+        let rows = stmt.query_map([], |row| {
+            let topics_str: String = row.get(0)?;
+            Ok(topics_str)
+        })?;
+
+        for row in rows {
+            let topics_str = row?;
+            if let Ok(topics) = serde_json::from_str::<Vec<String>>(&topics_str) {
+                for topic in topics {
+                    if !topic.is_empty() && !unique_topics.contains(&topic) {
+                        unique_topics.push(topic);
+                    }
+                }
+            }
+        }
+
+        unique_topics.sort();
+        Ok(unique_topics)
+    }
+
     // ─── List / Filter ───────────────────────────────────────────────────────
 
     /// List fragments with filtering and pagination.

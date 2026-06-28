@@ -21,7 +21,7 @@ export interface RecommendedFragment {
 
 /** Streaming chunk payload emitted by Tauri event `writing_chunk` */
 interface StreamChunkPayload {
-  type: 'Delta' | 'Done' | 'Error';
+  type: 'delta' | 'done' | 'error';
   content?: string;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   error?: Record<string, unknown>; // LlmError enum — e.g. { Timeout: { provider: "..." } }
@@ -145,7 +145,7 @@ export const useWritingStore = create<WritingStore>((set, get) => ({
       }
       console.log('[WritingStore] received writing_chunk:', chunk);
 
-      if (chunk.type === 'Delta' && chunk.content) {
+      if (chunk.type === 'delta' && chunk.content) {
         // Append delta content to the streaming assistant message
         set((state) => ({
           messages: state.messages.map((m) =>
@@ -154,7 +154,7 @@ export const useWritingStore = create<WritingStore>((set, get) => ({
               : m
           ),
         }));
-      } else if (chunk.type === 'Done') {
+      } else if (chunk.type === 'done') {
         // Stream complete — mark message as finished
         set((state) => ({
           messages: state.messages.map((m) =>
@@ -164,10 +164,12 @@ export const useWritingStore = create<WritingStore>((set, get) => ({
         }));
         // Clean up listener
         if (unlisten) unlisten();
-      } else if (chunk.type === 'Error') {
+      } else if (chunk.type === 'error') {
         // Stream error — mark message as finished with error
-        const errorMessage = chunk.error?.message || chunk.error?.Timeout?.provider
-          ? `${chunk.error?.Timeout?.provider || 'Provider'} 请求超时，请重试`
+        const errObj = chunk.error as Record<string, unknown> | undefined;
+        const timeoutProvider = (errObj?.Timeout as Record<string, unknown> | undefined)?.provider as string | undefined;
+        const errorMessage = timeoutProvider
+          ? `${timeoutProvider} 请求超时，请重试`
           : '操作失败，请重试';
         set((state) => ({
           messages: state.messages.map((m) =>
@@ -277,10 +279,17 @@ export const useWritingStore = create<WritingStore>((set, get) => ({
 
     let unlisten: UnlistenFn | null = null;
 
-    listen<StreamChunkPayload>('writing_chunk', (event) => {
-      const chunk = event.payload;
+    listen<string>('writing_chunk', (event) => {
+      let chunk: StreamChunkPayload;
+      try {
+        const raw = event.payload;
+        chunk = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      } catch {
+        console.error('[WritingStore] Failed to parse writing_chunk in quickAction:', event.payload);
+        return;
+      }
 
-      if (chunk.type === 'Delta' && chunk.content) {
+      if (chunk.type === 'delta' && chunk.content) {
         set((state) => ({
           messages: state.messages.map((m) =>
             m.id === assistantMsgId
@@ -288,7 +297,7 @@ export const useWritingStore = create<WritingStore>((set, get) => ({
               : m
           ),
         }));
-      } else if (chunk.type === 'Done') {
+      } else if (chunk.type === 'done') {
         set((state) => ({
           messages: state.messages.map((m) =>
             m.id === assistantMsgId ? { ...m, streaming: false } : m
@@ -296,8 +305,12 @@ export const useWritingStore = create<WritingStore>((set, get) => ({
           streaming: false,
         }));
         if (unlisten) unlisten();
-      } else if (chunk.type === 'Error') {
-        const errorMessage = chunk.error?.message || 'Stream error occurred';
+      } else if (chunk.type === 'error') {
+        const errObj = chunk.error as Record<string, unknown> | undefined;
+        const timeoutProvider = (errObj?.Timeout as Record<string, unknown> | undefined)?.provider as string | undefined;
+        const errorMessage = timeoutProvider
+          ? `${timeoutProvider} 请求超时，请重试`
+          : '操作失败，请重试';
         set((state) => ({
           messages: state.messages.map((m) =>
             m.id === assistantMsgId ? { ...m, streaming: false } : m

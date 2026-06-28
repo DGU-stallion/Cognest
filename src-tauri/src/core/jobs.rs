@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use super::embedding::EmbeddingEngine;
 use super::index::IndexDb;
-use super::llm::{LlmError, LlmGateway};
+use super::rig_agents::types::LlmError;
 use super::repo::FileRepo;
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -188,7 +188,6 @@ pub enum JobQueueError {
 /// Placeholder types for now — actual agent execution wired in tasks 7.1/8.1/9.1.
 pub struct WorkerContext {
     pub embedding: Arc<Mutex<EmbeddingEngine>>,
-    pub llm: Arc<Mutex<LlmGateway>>,
     pub repo: Arc<Mutex<FileRepo>>,
     pub index: Arc<Mutex<IndexDb>>,
 }

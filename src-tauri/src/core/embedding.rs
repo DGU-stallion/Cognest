@@ -234,6 +234,60 @@ impl EmbeddingEngine {
         Ok(scored)
     }
 
+    /// Find the top-k most similar fragments to a given query vector from a set of candidates.
+    /// Unlike `find_similar`, this method accepts a pre-computed vector rather than looking up
+    /// by fragment_id. Used by EmbeddingSearchTool for query-time similarity search.
+    ///
+    /// Returns Vec<(fragment_id, similarity)> sorted descending by similarity.
+    pub fn find_similar_by_vec(
+        &self,
+        query_vec: &[f32],
+        candidates: &[String],
+        top_k: usize,
+    ) -> Result<Vec<(String, f32)>, EmbeddingError> {
+        let query_norm: f32 = query_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+        if query_norm == 0.0 {
+            // Zero vector — similarity with everything is 0
+            let results: Vec<(String, f32)> = candidates
+                .iter()
+                .take(top_k)
+                .map(|id| (id.clone(), 0.0))
+                .collect();
+            return Ok(results);
+        }
+
+        let mut scored: Vec<(String, f32)> = Vec::with_capacity(candidates.len());
+
+        for candidate_id in candidates {
+            match self.get_vector(candidate_id) {
+                Ok(cand_vec) => {
+                    let dot: f32 = query_vec.iter().zip(cand_vec.iter()).map(|(a, b)| a * b).sum();
+                    let cand_norm: f32 = cand_vec.iter().map(|x| x * x).sum::<f32>().sqrt();
+
+                    let sim = if cand_norm == 0.0 {
+                        0.0
+                    } else {
+                        (dot / (query_norm * cand_norm)).clamp(-1.0, 1.0)
+                    };
+
+                    scored.push((candidate_id.clone(), sim));
+                }
+                Err(EmbeddingError::VectorMissing { .. }) => {
+                    // Skip candidates without vectors
+                    continue;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        // Sort descending by similarity
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(top_k);
+
+        Ok(scored)
+    }
+
     /// Compute the centroid (element-wise mean) of a set of vectors.
     /// Used for topic clustering. Returns a 512-d vector.
     /// If the input is empty, returns a zero vector.

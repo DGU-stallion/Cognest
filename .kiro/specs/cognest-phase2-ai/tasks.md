@@ -36,12 +36,12 @@
     - 实现 `embed_batch()` (后台批处理，进度回调 BatchProgress)
     - _Requirements: 1.3, 1.5, 1.6_
 
-  - [x]* 2.3 Property test: Embedding 向量完整性
+  - [x] 2.3 Property test: Embedding 向量完整性
     - **Property 1: Embedding 向量完整性**
     - 验证计算后 vectors.bin 条目存在且维度 = 512
     - **Validates: Requirements 1.1, 1.2**
 
-  - [x]* 2.4 Property test: 余弦相似度数学正确性
+  - [x] 2.4 Property test: 余弦相似度数学正确性
     - **Property 2: 余弦相似度数学正确性**
     - 验证 cosine ∈ [-1,1]，self-similarity ≈ 1.0，对称性 sim(a,b) = sim(b,a)
     - **Validates: Requirements 1.5**
@@ -54,7 +54,7 @@
     - 处理文件不存在/解密失败场景 → 返回 unconfigured 状态
     - _Requirements: 3.3, 3.6, 9.5, 9.6_
 
-  - [x]* 3.2 Property test: API Key 永不明文泄漏
+  - [x] 3.2 Property test: API Key 永不明文泄漏
     - **Property 7: API Key 永不明文泄漏**
     - 验证 API Key 只在 Keychain 和进程内存中存在，不出现在日志/文件/IPC
     - **Validates: Requirements 9.5**
@@ -88,7 +88,7 @@
     - 支持 structured output
     - _Requirements: 2.2_
 
-  - [x]* 4.5 单元测试: LlmGateway 路由与错误处理
+  - [x] 4.5 单元测试: LlmGateway 路由与错误处理
     - 使用 MockLlmProvider 验证路由逻辑
     - 测试 NoProvider / Timeout / AuthFailure 错误分类
     - 测试 stream 中断错误 (StreamChunk::Error with partial_tokens)
@@ -113,12 +113,12 @@
     - 失败后 emit job_failed 事件
     - _Requirements: 4.3, 4.4, 4.8_
 
-  - [x]* 6.3 Property test: Job Queue 状态机合法性
+  - [x] 6.3 Property test: Job Queue 状态机合法性
     - **Property 3: Job Queue 状态机合法性**
     - 验证只允许合法状态转换 (pending→running, running→{completed,failed,blocked}, etc.)
     - **Validates: Requirements 4.2, 4.3**
 
-  - [x]* 6.4 Property test: Job Queue 幂等恢复
+  - [x] 6.4 Property test: Job Queue 幂等恢复
     - **Property 8: Job Queue 幂等恢复**
     - 验证崩溃恢复后 running→pending, 无重复执行, 无丢失
     - **Validates: Requirements 4.2**
@@ -133,7 +133,7 @@
     - 失败时: 占位标题 "未命名主题-{timestamp}", 标记 ai_processed: false, 入队重试
     - _Requirements: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8_
 
-  - [x]* 7.2 Property test: Curator Agent 不修改正文
+  - [x] 7.2 Property test: Curator Agent 不修改正文
     - **Property 4: Curator Agent 不修改正文**
     - 验证 Curator 处理前后 body 区域 byte-identical
     - **Validates: Requirements 5.6**
@@ -147,7 +147,7 @@
     - 快捷动作: outline / expand / recommend 的 system prompt 封装
     - _Requirements: 6.2, 6.3, 6.5, 6.6_
 
-  - [x]* 8.2 Property test: 隐私数据量边界
+  - [x] 8.2 Property test: 隐私数据量边界
     - **Property 5: 隐私数据量边界**
     - 验证发往 LLM 的请求 fragment_count ≤ 20 且 token_count ≤ 8000
     - **Validates: Requirements 9.2**
@@ -253,7 +253,7 @@
     - 错误/超时 → 显示错误 + 重试按钮, 保留原始 prompt
     - _Requirements: 7.2, 7.3, 7.7_
 
-  - [x]* 14.4 Property test: View_Spec 数据截断
+  - [x] 14.4 Property test: View_Spec 数据截断
     - **Property 6: View_Spec 数据截断**
     - 验证渲染时 nodes.length ≤ 200, 超出按 most-connected 截断
     - **Validates: Requirements 7.6**

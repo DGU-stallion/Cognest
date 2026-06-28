@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listen } from '@tauri-apps/api/event';
-import { marked } from 'marked';
 import { useComposeStore } from '../stores/composeStore';
+import { useWritingStore } from '../stores/writingStore';
 import type { Fragment } from '../stores/captureStore';
-import type { EditorHandle } from '../components/Editor';
+import type { EditorHandle, EditorMode } from '../components/Editor';
 import Editor from '../components/Editor';
 import { WritingPanel } from '../components/WritingPanel';
 import './Compose.css';
@@ -34,7 +34,7 @@ function formatUpdatedAt(iso: string): string {
 }
 
 /** Drag-to-resize hook (fixed closure bug — no width in deps) */
-function useResizable(initial: number, min: number, max: number) {
+function useResizable(initial: number, min: number, max: number, invert = false) {
   const [width, setWidth] = useState(initial);
   const widthRef = useRef(initial);
   const dragging = useRef(false);
@@ -46,6 +46,7 @@ function useResizable(initial: number, min: number, max: number) {
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     dragging.current = true;
     startX.current = e.clientX;
     startW.current = widthRef.current;
@@ -55,7 +56,9 @@ function useResizable(initial: number, min: number, max: number) {
     const onMove = (ev: MouseEvent) => {
       if (!dragging.current) return;
       const delta = ev.clientX - startX.current;
-      const newWidth = Math.min(max, Math.max(min, startW.current + delta));
+      // invert: for right-side panels, dragging right = shrinking the panel
+      const adjustedDelta = invert ? -delta : delta;
+      const newWidth = Math.min(max, Math.max(min, startW.current + adjustedDelta));
       setWidth(newWidth);
     };
     const onUp = () => {
@@ -67,7 +70,7 @@ function useResizable(initial: number, min: number, max: number) {
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [min, max]);
+  }, [min, max, invert]);
 
   return { width, onMouseDown };
 }
@@ -89,16 +92,26 @@ export default function Compose() {
     cycleStatus,
     loadRelated,
     saveArticle,
-    createNewArticle,
   } = useComposeStore();
+
+  const { panelOpen, togglePanel } = useWritingStore();
 
   const [activeTab, setActiveTab] = useState<RefTab>('inspirations');
   const [searchQuery, setSearchQuery] = useState('');
   const [insertingId, setInsertingId] = useState<string | null>(null);
+  const [editorMode, setEditorMode] = useState<EditorMode>('wysiwyg');
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
   const editorRef = useRef<EditorHandle>(null);
   const titleSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const leftPanel = useResizable(280, 180, 400);
-  const rightPanel = useResizable(320, 200, 500);
+  const rightPanel = useResizable(320, 200, 500, true);
+
+  // Auto-create a new article when entering compose page with no article
+  useEffect(() => {
+    if (!currentArticleId && !loading) {
+      useComposeStore.getState().createNewArticle();
+    }
+  }, []); // Only on mount
 
   // Load related fragments reactively based on article content
   useEffect(() => {
@@ -110,7 +123,7 @@ export default function Compose() {
     if (!bodyContent && !title) return;
     const timer = setTimeout(() => {
       loadRelated(bodyContent || title);
-    }, 2000); // 2s debounce to avoid excessive reloading
+    }, 2000);
     return () => clearTimeout(timer);
   }, [bodyContent, title, loadRelated]);
 
@@ -129,12 +142,10 @@ export default function Compose() {
   }, [loadRelated, bodyContent, title]);
 
   // When currentArticleId changes and bodyContent is loaded, push it into the editor
-  // Convert markdown to HTML if the content looks like raw markdown
+  // Use the editor's setContent which handles markdown parsing properly
   useEffect(() => {
     if (currentArticleId && !loading && bodyContent !== undefined && editorRef.current) {
-      const isMarkdown = bodyContent.startsWith('#') || bodyContent.includes('\n#') || bodyContent.includes('**');
-      const html = isMarkdown ? (marked.parse(bodyContent) as string) : bodyContent;
-      editorRef.current.setContent(html);
+      editorRef.current.setContent(bodyContent);
     }
   }, [currentArticleId, bodyContent, loading]);
 
@@ -157,10 +168,10 @@ export default function Compose() {
     setTimeout(() => setInsertingId(null), 300);
   }, []);
 
-  // Editor update handler (auto-save)
+  // Editor update handler (auto-save) — receives Markdown body from Editor
   const handleEditorUpdate = useCallback(
-    (html: string) => {
-      saveArticle(html);
+    (markdown: string) => {
+      saveArticle(markdown);
     },
     [saveArticle],
   );
@@ -178,14 +189,12 @@ export default function Compose() {
     (e: React.ChangeEvent<HTMLInputElement>) => {
       setTitle(e.target.value);
 
-      // Debounce title save (1s)
       if (titleSaveTimerRef.current) {
         clearTimeout(titleSaveTimerRef.current);
       }
       titleSaveTimerRef.current = setTimeout(() => {
-        // Trigger a save with current editor content
-        const html = editorRef.current?.getHTML() ?? '';
-        saveArticle(html);
+        const markdown = editorRef.current?.getMarkdown() ?? '';
+        saveArticle(markdown);
       }, 1000);
     },
     [setTitle, saveArticle],
@@ -200,27 +209,22 @@ export default function Compose() {
     };
   }, []);
 
-  // Toolbar button handlers
-  const handleBold = useCallback(() => {
-    editorRef.current?.getEditor()?.chain().focus().toggleBold().run();
-  }, []);
+  // Mode toggle handler — delegates to the Editor component
+  const handleModeToggle = useCallback((targetMode: EditorMode) => {
+    if (targetMode === editorMode) return;
+    // The Editor exposes mode switching via imperative handle indirectly,
+    // but since mode is internal to Editor, we need a different approach.
+    // We'll lift mode state to Compose and pass it to Editor.
+    setEditorMode(targetMode);
+  }, [editorMode]);
 
-  const handleItalic = useCallback(() => {
-    editorRef.current?.getEditor()?.chain().focus().toggleItalic().run();
-  }, []);
-
-  const handleCode = useCallback(() => {
-    editorRef.current?.getEditor()?.chain().focus().toggleCode().run();
-  }, []);
-
-  const handleBlockquote = useCallback(() => {
-    editorRef.current?.getEditor()?.chain().focus().toggleBlockquote().run();
-  }, []);
-
-  // Handle new article creation
-  const handleNewArticle = useCallback(() => {
-    createNewArticle();
-  }, [createNewArticle]);
+  // Toggle right AI panel
+  const handleToggleRightPanel = useCallback(() => {
+    setRightPanelOpen((v) => !v);
+    if (!panelOpen) {
+      togglePanel();
+    }
+  }, [panelOpen, togglePanel]);
 
   // Filter fragments by search query
   const filteredFragments = searchQuery
@@ -293,6 +297,73 @@ export default function Compose() {
 
       {/* Center: editor */}
       <div className="editor-area">
+        {/* Top bar with controls */}
+        <div className="compose-topbar">
+          {/* Immersive mode button */}
+          <button
+            className={`compose-topbar__btn${immersiveMode ? ' compose-topbar__btn--active' : ''}`}
+            onClick={toggleImmersive}
+            title="沉浸式写作 ⌘⇧F"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
+            </svg>
+          </button>
+
+          <div className="compose-topbar__spacer" />
+
+          {/* Mode toggle: single button */}
+          <button
+            className="compose-topbar__btn"
+            onClick={() => handleModeToggle(editorMode === 'wysiwyg' ? 'source' : 'wysiwyg')}
+            title={editorMode === 'wysiwyg' ? '查看源码' : '返回编辑器'}
+          >
+            {editorMode === 'wysiwyg' ? (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
+              </svg>
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+            )}
+          </button>
+
+          {/* More actions */}
+          <button className="compose-topbar__btn" title="更多操作">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <circle cx="12" cy="5" r="1.5" fill="currentColor" />
+              <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+              <circle cx="12" cy="19" r="1.5" fill="currentColor" />
+            </svg>
+          </button>
+
+          {/* AI panel toggle */}
+          <button
+            className={`compose-topbar__btn${rightPanelOpen ? ' compose-topbar__btn--active' : ''}`}
+            onClick={handleToggleRightPanel}
+            title="AI 写作助手"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4" />
+            </svg>
+          </button>
+
+          {/* Collapse right panel */}
+          <button
+            className="compose-topbar__btn"
+            onClick={() => setRightPanelOpen(false)}
+            title="收起右侧面板"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+              <rect x="4" y="4" width="16" height="16" rx="2" />
+              <path d="M15 4v16" />
+              <path d="M19 12l-2 2M19 12l-2-2" />
+            </svg>
+          </button>
+        </div>
+
         {currentArticleId && (
           <div className="compose-title-bar">
             <input
@@ -307,41 +378,6 @@ export default function Compose() {
             </span>
           </div>
         )}
-        <div className="editor-toolbar">
-          <button title="加粗" onClick={handleBold}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M6 4h8a4 4 0 014 4 4 4 0 01-4 4H6zM6 12h9a4 4 0 014 4 4 4 0 01-4 4H6z" />
-            </svg>
-          </button>
-          <button title="斜体" onClick={handleItalic}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M19 4h-9M14 20H5M15 4L9 20" />
-            </svg>
-          </button>
-          <button title="代码" onClick={handleCode}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M16 18l6-6-6-6M8 6l-6 6 6 6" />
-            </svg>
-          </button>
-          <button title="引用" onClick={handleBlockquote}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M10 11h-4a1 1 0 01-1-1V6a1 1 0 011-1h3a1 1 0 011 1v5zm0 0a4 4 0 01-4 4M19 11h-4a1 1 0 01-1-1V6a1 1 0 011-1h3a1 1 0 011 1v5zm0 0a4 4 0 01-4 4" />
-            </svg>
-          </button>
-          <div className="sep" />
-          <button title="插入碎片引用">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.9-1.026a4.5 4.5 0 00-1.242-7.244l-4.5-4.5a4.5 4.5 0 00-6.364 6.364l1.757 1.757" />
-            </svg>
-          </button>
-          <div className="spacer" />
-          <button className="immerse" onClick={toggleImmersive} title="⌘⇧F">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-            </svg>
-            沉浸模式
-          </button>
-        </div>
 
         <div className="editor-body">
           {!currentArticleId && !loading ? (
@@ -362,17 +398,24 @@ export default function Compose() {
                 content={bodyContent}
                 onUpdate={handleEditorUpdate}
                 onWordCountChange={handleWordCountChange}
+                mode={editorMode}
+                onModeChange={setEditorMode}
               />
             </>
           )}
         </div>
       </div>
 
-      {/* Resize handle: center ↔ right */}
-      <div className="resize-handle" onMouseDown={rightPanel.onMouseDown} />
+      {/* Resize handle: center ↔ right (only when right panel is open) */}
+      {rightPanelOpen && (
+        <div className="resize-handle" onMouseDown={rightPanel.onMouseDown} />
+      )}
 
-      {/* Right: AI panel */}
-      <div className="ai-side" style={{ width: rightPanel.width, flexShrink: 0 }}>
+      {/* Right: AI panel (default collapsed) */}
+      <div
+        className={`ai-side${rightPanelOpen ? '' : ' collapsed'}`}
+        style={rightPanelOpen ? { width: rightPanel.width, flexShrink: 0 } : undefined}
+      >
         <WritingPanel />
       </div>
     </div>

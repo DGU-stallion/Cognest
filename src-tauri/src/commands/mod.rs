@@ -4,6 +4,7 @@
 // No business logic lives here — only state extraction, deserialization, and forwarding.
 
 pub mod ai;
+pub mod cli_agents;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};

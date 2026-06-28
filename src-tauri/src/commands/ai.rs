@@ -1,22 +1,25 @@
 // Cognest IPC Command Layer — AI Commands
 //
 // Thin #[tauri::command] functions for AI subsystem.
-// Forwards to EmbeddingEngine, LlmGateway, JobQueue, SettingsManager,
-// WritingAgent, and ReflectionAgent.
+// Forwards to EmbeddingEngine, JobQueue, SettingsManager,
+// WritingAgent (via Rig), and ReflectionAgent.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
-use futures::StreamExt;
 use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
+use tokio_util::sync::CancellationToken;
 
 use crate::commands::AppState;
-use crate::core::agents::reflection::ViewSpec;
-use crate::core::agents::writing::WritingAgent;
+use crate::core::reflection::ViewSpec;
 use crate::core::embedding::EmbeddingEngine;
-use crate::core::jobs::{AuditRecord, JobQueue, JobRecord, WorkerContext};
-use crate::core::llm::{ChatMessage, ChatOptions, LlmGateway, Role, StreamChunk};
+use crate::core::jobs::{AuditRecord, JobQueue, JobRecord};
+use crate::core::rig_agents::types::{ChatMessage, Role};
+use crate::core::rig_agents::registry::AgentRegistry;
+use crate::core::rig_agents::stream_adapter::stream_to_tauri_events;
+use crate::core::rig_agents::AgentError;
 use crate::core::settings::{AppSettings, ProviderConfig, SettingsManager};
 
 // ─── AI Application State ───────────────────────────────────────────────────
@@ -24,9 +27,18 @@ use crate::core::settings::{AppSettings, ProviderConfig, SettingsManager};
 /// Shared AI state holding subsystem instances behind Arc/Mutex guards.
 pub struct AiState {
     pub embedding: Arc<Mutex<EmbeddingEngine>>,
-    pub llm: Arc<Mutex<LlmGateway>>,
     pub jobs: Arc<JobQueue>,
     pub settings: Arc<Mutex<SettingsManager>>,
+}
+
+// ─── Rig Agent State ────────────────────────────────────────────────────────
+
+/// Tauri managed state for the Rig Agent layer.
+///
+/// Contains the AgentRegistry which manages all Rig Agent instances.
+/// This is separate from the legacy AiState to allow incremental migration.
+pub struct RigState {
+    pub registry: AgentRegistry,
 }
 
 // ─── IPC-specific DTO Types ─────────────────────────────────────────────────
@@ -100,179 +112,157 @@ pub fn find_similar_fragments(
         .collect())
 }
 
-// ─── Writing Agent Commands ─────────────────────────────────────────────────
+// ─── Writing Agent Commands (Rig-based async) ──────────────────────────────
 
-/// Synchronous writing chat (returns full response).
+/// Synchronous writing chat via Rig Agent (returns full response).
+///
+/// Uses AgentRegistry to obtain WritingRigAgent, calls `chat()`, and returns
+/// the complete response. Fully async.
 #[tauri::command(async)]
 pub async fn writing_chat(
-    state: State<'_, AiState>,
+    rig_state: State<'_, RigState>,
     app_state: State<'_, AppState>,
+    app: tauri::AppHandle,
     article_id: String,
     message: String,
     history: Vec<ChatMessage>,
 ) -> Result<String, String> {
-    let embedding = state.embedding.clone();
-    let llm = state.llm.clone();
-    let jobs = state.jobs.clone();
-    let repo = Arc::new(Mutex::new(
-        app_state.repo.lock().map_err(|e| e.to_string())?.clone_for_ai()
-    ));
-    let index_arc = app_state.index_arc.clone();
+    // 1. Get WritingAgent from registry
+    let agent = rig_state
+        .registry
+        .writing_agent()
+        .await
+        .map_err(|e| handle_agent_error(&app, e))?;
 
-    let result = tokio::task::spawn_blocking(move || {
-        let context = WorkerContext {
-            embedding,
-            llm: llm.clone(),
-            repo,
-            index: index_arc,
-        };
-        let agent = WritingAgent;
-
-        // Resolve provider name for audit logging
-        let provider_name = {
-            let llm_guard = llm.lock().map_err(|e| e.to_string())?;
-            llm_guard.resolve_provider_name("writing").unwrap_or_default()
-        };
-        let is_cloud = !provider_name.is_empty() && provider_name != "ollama";
-
-        // Use article_id as a reference — load actual content from repo
-        let article_content = {
-            let repo_guard = context.repo.lock().map_err(|e| e.to_string())?;
-            match repo_guard.read_article(&article_id) {
-                Ok((_meta, body)) => body,
-                Err(_) => article_id.clone(), // Fallback: use the ID as content hint
-            }
-        };
-
-        let response = agent
-            .chat(&article_content, &message, &history, &context)
-            .map_err(|_e| {
-                // Record audit for failed cloud request (success=false per Req 9.7)
-                if is_cloud {
-                    let _ = jobs.record_audit(&provider_name, "chat", 0, false);
-                }
-                // Privacy (Req 9.7): return neutral error message to frontend.
-                // Don't confirm whether data reached the remote endpoint.
-                format!("操作失败，请检查网络后重试")
-            })?;
-
-        // Record audit for successful cloud request (no content logged)
-        if is_cloud {
-            let _ = jobs.record_audit(
-                &provider_name,
-                "chat",
-                response.usage.total_tokens,
-                true,
-            );
+    // 2. Load article content from repo
+    let article_content = {
+        let repo = app_state.repo.lock().map_err(|e| e.to_string())?;
+        match repo.read_article(&article_id) {
+            Ok((_meta, body)) => body,
+            Err(_) => article_id.clone(),
         }
+    };
 
-        Ok::<String, String>(response.content)
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?;
+    // 3. Find related fragments via embedding (best-effort)
+    let related_fragments = find_related_fragments_for_writing(&rig_state, &article_content);
 
-    result
+    // 4. Convert ChatMessage history to rig::completion::Message
+    let rig_history = convert_history_to_rig(&history);
+
+    // 5. Call Rig WritingAgent.chat()
+    let response = agent
+        .chat(&article_content, &related_fragments, &message, rig_history)
+        .await
+        .map_err(|e| handle_agent_error(&app, e))?;
+
+    Ok(response)
 }
 
-/// Streaming writing chat — emits "writing_chunk" events to the frontend.
+/// Streaming writing chat via Rig Agent — emits "writing_chunk" events to the frontend.
+///
+/// Uses AgentRegistry to obtain WritingRigAgent, calls `stream_chat()`,
+/// then adapts the stream to Tauri events via `stream_to_tauri_events()`.
+/// Fully async.
 #[tauri::command(async)]
 pub async fn writing_stream_chat(
-    state: State<'_, AiState>,
+    rig_state: State<'_, RigState>,
     app_state: State<'_, AppState>,
     app: tauri::AppHandle,
     article_id: String,
     message: String,
     history: Vec<ChatMessage>,
 ) -> Result<(), String> {
-    let embedding = state.embedding.clone();
-    let llm = state.llm.clone();
-    let jobs = state.jobs.clone();
-    let repo = Arc::new(Mutex::new(
-        app_state.repo.lock().map_err(|e| e.to_string())?.clone_for_ai()
-    ));
-    let index_arc = app_state.index_arc.clone();
+    // 1. Get WritingAgent from registry
+    let agent = rig_state
+        .registry
+        .writing_agent()
+        .await
+        .map_err(|e| handle_agent_error(&app, e))?;
 
-    // Resolve provider name for audit logging before entering blocking task
-    let provider_name = {
-        let llm_guard = state.llm.lock().map_err(|e| e.to_string())?;
-        llm_guard.resolve_provider_name("writing").unwrap_or_default()
-    };
-    let is_cloud = !provider_name.is_empty() && provider_name != "ollama";
-
-    // Build context and get stream in a blocking task
-    let stream_result = tokio::task::spawn_blocking(move || {
-        let context = WorkerContext {
-            embedding,
-            llm,
-            repo,
-            index: index_arc,
-        };
-        let agent = WritingAgent;
-
-        let article_content = {
-            let repo_guard = context.repo.lock().map_err(|e| e.to_string())?;
-            match repo_guard.read_article(&article_id) {
-                Ok((_meta, body)) => body,
-                Err(_) => article_id.clone(),
-            }
-        };
-
-        let stream = agent
-            .stream_chat(&article_content, &message, &history, &context)
-            .map_err(|_e| {
-                // Privacy (Req 9.7): return neutral error message.
-                "操作失败，请检查网络后重试".to_string()
-            })?;
-
-        Ok::<_, String>(stream)
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?;
-
-    match stream_result {
-        Ok(mut stream) => {
-            // Consume the stream and emit events to the frontend
-            let mut total_tokens: u32 = 0;
-            let mut stream_success = true;
-
-            while let Some(chunk) = stream.next().await {
-                let payload = serde_json::to_string(&chunk).unwrap_or_default();
-                let _ = app.emit("writing_chunk", &payload);
-
-                // Track final token usage and detect errors
-                match &chunk {
-                    StreamChunk::Done { usage } => {
-                        total_tokens = usage.total_tokens;
-                        break;
-                    }
-                    StreamChunk::Error { partial_tokens, .. } => {
-                        total_tokens = *partial_tokens;
-                        stream_success = false;
-                        break;
-                    }
-                    _ => {}
-                }
-            }
-
-            // Record audit for cloud request
-            if is_cloud {
-                let _ = jobs.record_audit(
-                    &provider_name,
-                    "stream_chat",
-                    total_tokens,
-                    stream_success,
-                );
-            }
-
-            Ok(())
+    // 2. Load article content from repo
+    let article_content = {
+        let repo = app_state.repo.lock().map_err(|e| e.to_string())?;
+        match repo.read_article(&article_id) {
+            Ok((_meta, body)) => body,
+            Err(_) => article_id.clone(),
         }
-        Err(e) => {
-            // Record audit for failed cloud request (success=false per Req 9.7)
-            if is_cloud {
-                let _ = jobs.record_audit(&provider_name, "stream_chat", 0, false);
-            }
-            // Privacy (Req 9.7): return neutral error message to frontend.
-            Err("操作失败，请检查网络后重试".to_string())
+    };
+
+    // 3. Find related fragments via embedding (best-effort)
+    let related_fragments = find_related_fragments_for_writing(&rig_state, &article_content);
+
+    // 4. Convert ChatMessage history to rig::completion::Message
+    let rig_history = convert_history_to_rig(&history);
+
+    // 5. Call Rig WritingAgent.stream_chat()
+    let stream = agent
+        .stream_chat(&article_content, &related_fragments, &message, rig_history)
+        .await
+        .map_err(|e| handle_agent_error(&app, e))?;
+
+    // 6. Adapt stream to Tauri events (with cancellation support)
+    let cancel_token = CancellationToken::new();
+    let _result = stream_to_tauri_events(stream, &app, cancel_token).await;
+
+    Ok(())
+}
+
+// ─── Writing Agent Helper Functions ─────────────────────────────────────────
+
+/// Find related fragments for the writing context using the embedding engine.
+///
+/// Returns (content, similarity) pairs. Best-effort: returns empty vec on failure.
+fn find_related_fragments_for_writing(
+    _rig_state: &State<'_, RigState>,
+    _article_content: &str,
+) -> Vec<(String, f64)> {
+    // Note: Full embedding integration happens in task 5.3 (app startup integration).
+    // For now return empty — the WritingAgent handles empty fragments gracefully.
+    Vec::new()
+}
+
+/// Convert frontend ChatMessage history to rig::completion::Message format.
+fn convert_history_to_rig(history: &[ChatMessage]) -> Vec<rig::completion::Message> {
+    history
+        .iter()
+        .filter_map(|msg| match msg.role {
+            Role::User => Some(rig::completion::Message::user(&msg.content)),
+            Role::Assistant => Some(rig::completion::Message::assistant(&msg.content)),
+            Role::System => None, // System messages are handled via agent preamble
+        })
+        .collect()
+}
+
+/// Handle AgentError: emit provider fallback notification if applicable,
+/// and return a user-friendly error string.
+fn handle_agent_error(app: &tauri::AppHandle, error: AgentError) -> String {
+    match &error {
+        AgentError::ProviderFallback { from, to } => {
+            // Notify frontend about provider fallback via Tauri event (Req 2.6)
+            let payload = serde_json::json!({
+                "from": from,
+                "to": to,
+                "message": format!("Provider 回退: {} → {}", from, to)
+            });
+            let _ = app.emit("provider_fallback", payload);
+            // Still return as error string for command result
+            format!("Provider 回退: {} → {}", from, to)
+        }
+        AgentError::AgentUnavailable { reason, .. } => {
+            format!("AI 模型未配置: {}", reason)
+        }
+        AgentError::NoProvider => {
+            "无可用 AI 模型，请在设置中配置".to_string()
+        }
+        AgentError::Timeout => {
+            "请求超时，请稍后重试".to_string()
+        }
+        AgentError::Cancelled => {
+            "请求已取消".to_string()
+        }
+        _ => {
+            // Privacy: neutral error message, don't leak provider details
+            "操作失败，请检查网络后重试".to_string()
         }
     }
 }
@@ -316,101 +306,138 @@ pub fn writing_recommend(
 // ─── View Generation Commands ───────────────────────────────────────────────
 
 /// Generate a view from a natural language prompt.
+///
+/// Uses direct HTTP call to the configured LLM provider (via settings).
 #[tauri::command(async)]
 pub async fn generate_view(
     state: State<'_, AiState>,
     prompt: String,
 ) -> Result<ViewSpec, String> {
-    let llm = state.llm.clone();
     let jobs = state.jobs.clone();
 
-    // Resolve provider name for audit logging
-    let provider_name = {
-        let llm_guard = state.llm.lock().map_err(|e| e.to_string())?;
-        llm_guard.resolve_provider_name("view_generator").unwrap_or_default()
+    // Load settings to resolve provider
+    let (endpoint, api_key, model, provider_name) = {
+        let settings_mgr = state.settings.lock().map_err(|e| e.to_string())?;
+        let app_settings = settings_mgr.load().map_err(|e| e.to_string())?;
+
+        // Find the default provider or first enabled provider
+        let default_id = app_settings.routing.default_provider.clone();
+        let provider = app_settings
+            .providers
+            .iter()
+            .find(|p| p.enabled && Some(p.id.clone()) == default_id)
+            .or_else(|| app_settings.providers.iter().find(|p| p.enabled))
+            .ok_or_else(|| "无可用 Provider，请在设置中配置".to_string())?
+            .clone();
+
+        let api_key = settings_mgr
+            .get_api_key(&provider.id)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+
+        (provider.endpoint.clone(), api_key, provider.model.clone(), provider.name.clone())
     };
-    let is_cloud = !provider_name.is_empty() && provider_name != "ollama";
 
-    let result = tokio::task::spawn_blocking(move || {
-        let llm_guard = llm.lock().map_err(|e| e.to_string())?;
+    let is_cloud = !provider_name.is_empty() && provider_name.to_lowercase() != "ollama";
 
-        let system_msg = ChatMessage {
-            role: Role::System,
-            content: concat!(
-                "你是 Cognest 的视图生成助手。根据用户的自然语言描述，生成一个 ViewSpec JSON。",
-                "支持的类型: graph, timeline, list, chart, summary。",
-                "返回纯 JSON，不要额外解释。",
-                "JSON 格式: {\"id\": \"<uuid>\", \"type\": \"<type>\", \"title\": \"<标题>\", ",
-                "\"query\": \"<原始提示>\", \"created\": \"\", \"pinned\": false, ",
-                "\"config\": {}, \"data\": {\"markdown\": \"<内容>\", \"stats\": {}}}"
-            )
-            .to_string(),
-        };
+    let system_msg = serde_json::json!({
+        "role": "system",
+        "content": concat!(
+            "你是 Cognest 的视图生成助手。根据用户的自然语言描述，生成一个 ViewSpec JSON。",
+            "支持的类型: graph, timeline, list, chart, summary。",
+            "返回纯 JSON，不要额外解释。",
+            "JSON 格式: {\"id\": \"<uuid>\", \"type\": \"<type>\", \"title\": \"<标题>\", ",
+            "\"query\": \"<原始提示>\", \"created\": \"\", \"pinned\": false, ",
+            "\"config\": {}, \"data\": {\"markdown\": \"<内容>\", \"stats\": {}}}"
+        )
+    });
+    let user_msg = serde_json::json!({
+        "role": "user",
+        "content": prompt.clone()
+    });
 
-        let user_msg = ChatMessage {
-            role: Role::User,
-            content: prompt.clone(),
-        };
+    let url = {
+        let base = endpoint.trim_end_matches('/');
+        // Avoid double /v1 if user already included it in the endpoint
+        if base.ends_with("/v1") {
+            format!("{}/chat/completions", base)
+        } else {
+            format!("{}/v1/chat/completions", base)
+        }
+    };
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [system_msg, user_msg],
+        "response_format": {
+            "type": "json_object"
+        }
+    });
 
-        let options = ChatOptions {
-            json_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "id": {"type": "string"},
-                    "type": {"type": "string", "enum": ["graph", "timeline", "list", "chart", "summary"]},
-                    "title": {"type": "string"},
-                    "query": {"type": "string"},
-                    "pinned": {"type": "boolean"},
-                    "config": {"type": "object"},
-                    "data": {"type": "object"}
-                },
-                "required": ["id", "type", "title", "query", "data"]
-            })),
-            ..Default::default()
-        };
+    let client = reqwest::Client::new();
+    let mut req = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .timeout(Duration::from_secs(60));
 
-        let response = llm_guard
-            .chat_for_agent("view_generator", &[system_msg, user_msg], &options)
-            .map_err(|_e| {
-                // Record audit for failed cloud request (success=false per Req 9.7)
-                if is_cloud {
-                    let _ = jobs.record_audit(&provider_name, "generate_view", 0, false);
-                }
-                // Privacy (Req 9.7): return neutral error message to frontend.
-                // Don't confirm whether data reached the remote endpoint.
-                format!("操作失败，请检查网络后重试")
-            })?;
+    if !api_key.is_empty() {
+        req = req.header("Authorization", format!("Bearer {}", api_key));
+    }
 
-        // Record audit for successful cloud request
+    let response = req.json(&body).send().await.map_err(|e| {
+        log::error!("[generate_view] HTTP request failed: {}", e);
         if is_cloud {
-            let _ = jobs.record_audit(
-                &provider_name,
-                "generate_view",
-                response.usage.total_tokens,
-                true,
-            );
+            let _ = jobs.record_audit(&provider_name, "generate_view", 0, false);
         }
+        format!("操作失败，请检查网络后重试")
+    })?;
 
-        // Parse the response content as ViewSpec
-        let mut view_spec: ViewSpec =
-            serde_json::from_str(&response.content).map_err(|e| {
-                format!("视图 JSON 解析失败: {} — 原始响应: {}", e, response.content)
-            })?;
-
-        // Ensure created timestamp and query are populated
-        if view_spec.created.is_empty() {
-            view_spec.created = chrono::Local::now().to_rfc3339();
+    if !response.status().is_success() {
+        let status = response.status();
+        let body_text = response.text().await.unwrap_or_default();
+        log::error!("[generate_view] API error {}: {}", status, body_text);
+        if is_cloud {
+            let _ = jobs.record_audit(&provider_name, "generate_view", 0, false);
         }
-        if view_spec.query.is_empty() {
-            view_spec.query = prompt;
-        }
+        return Err(format!("AI 请求失败 ({})", status));
+    }
 
-        Ok::<ViewSpec, String>(view_spec)
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?;
+    #[derive(Deserialize)]
+    struct ApiResponse { choices: Vec<ApiChoice>, usage: Option<ApiUsage> }
+    #[derive(Deserialize)]
+    struct ApiChoice { message: Option<ApiMsg> }
+    #[derive(Deserialize)]
+    struct ApiMsg { content: Option<String> }
+    #[derive(Deserialize)]
+    struct ApiUsage { total_tokens: u32 }
 
-    result
+    let api_resp: ApiResponse = response.json().await.map_err(|e| {
+        format!("响应解析失败: {}", e)
+    })?;
+
+    let total_tokens = api_resp.usage.map(|u| u.total_tokens).unwrap_or(0);
+    if is_cloud {
+        let _ = jobs.record_audit(&provider_name, "generate_view", total_tokens, true);
+    }
+
+    let content = api_resp.choices.first()
+        .and_then(|c| c.message.as_ref())
+        .and_then(|m| m.content.clone())
+        .unwrap_or_default();
+
+    let mut view_spec: ViewSpec =
+        serde_json::from_str(&content).map_err(|e| {
+            format!("视图 JSON 解析失败: {} — 原始响应: {}", e, content)
+        })?;
+
+    if view_spec.created.is_empty() {
+        view_spec.created = chrono::Local::now().to_rfc3339();
+    }
+    if view_spec.query.is_empty() {
+        view_spec.query = prompt;
+    }
+
+    Ok(view_spec)
 }
 
 /// Pin a view (save to persistent storage).
@@ -477,36 +504,48 @@ pub fn get_ai_settings(
 }
 
 /// Save AI settings and API keys.
-#[tauri::command]
-pub fn save_ai_settings(
+///
+/// After persisting settings, triggers hot-reload of the Rig AgentRegistry
+/// so that updated Provider config takes effect immediately without restarting the app.
+#[tauri::command(async)]
+pub async fn save_ai_settings(
     state: State<'_, AiState>,
+    rig_state: State<'_, RigState>,
     settings: AppSettings,
     api_keys: HashMap<String, String>,
 ) -> Result<(), String> {
-    let settings_mgr = state.settings.lock().map_err(|e| e.to_string())?;
+    // --- Synchronous section: all std::sync::Mutex work before any .await ---
+    let settings_for_reload = settings.clone();
 
-    // Save settings to encrypted file
-    settings_mgr.save(&settings).map_err(|e| e.to_string())?;
+    {
+        let settings_mgr = state.settings.lock().map_err(|e| e.to_string())?;
 
-    // Save each API key to macOS Keychain
-    for (provider_id, key) in &api_keys {
-        if key.is_empty() {
-            // Empty key means user wants to delete it
-            settings_mgr
-                .delete_api_key(provider_id)
-                .map_err(|e| e.to_string())?;
-        } else {
-            settings_mgr
-                .set_api_key(provider_id, key)
-                .map_err(|e| e.to_string())?;
+        // Save settings to encrypted file
+        settings_mgr.save(&settings).map_err(|e| e.to_string())?;
+
+        // Save each API key to macOS Keychain
+        for (provider_id, key) in &api_keys {
+            if key.is_empty() {
+                settings_mgr
+                    .delete_api_key(provider_id)
+                    .map_err(|e| e.to_string())?;
+            } else {
+                settings_mgr
+                    .set_api_key(provider_id, key)
+                    .map_err(|e| e.to_string())?;
+            }
         }
-    }
+    } // settings_mgr dropped here
 
-    // Hot-reload LLM Gateway with new settings
-    drop(settings_mgr);
-    let mut llm = state.llm.lock().map_err(|e| e.to_string())?;
-    let settings_mgr = state.settings.lock().map_err(|e| e.to_string())?;
-    llm.reload(&settings_mgr).map_err(|e| e.to_string())?;
+    // --- Async section: Rig AgentRegistry reload ---
+    // AgentRegistry::reload() internally calls build_inner (sync) then acquires a
+    // tokio::RwLock (async). We must not hold std::sync::MutexGuard across await.
+    rig_state
+        .registry
+        .reload_with_sync_settings(&settings_for_reload, &state.settings)
+        .await
+        .map_err(|e| e.to_string())?;
+    log::info!("AgentRegistry 热重载完成");
 
     Ok(())
 }
@@ -612,16 +651,34 @@ pub async fn list_ollama_models(
     _state: State<'_, AiState>,
     endpoint: String,
 ) -> Result<Vec<String>, String> {
-    use crate::core::llm::ollama::OllamaProvider;
+    let url = format!("{}/api/tags", endpoint.trim_end_matches('/'));
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| e.to_string())?;
 
-    let result = tokio::task::spawn_blocking(move || {
-        let provider = OllamaProvider::new(endpoint, String::new());
-        provider.list_models().map_err(|e| e.to_string())
-    })
-    .await
-    .map_err(|e| format!("Task join error: {}", e))?;
+    let response = client.get(&url).send().await.map_err(|e| {
+        if e.is_timeout() {
+            "Ollama 请求超时".to_string()
+        } else {
+            "Ollama 连接失败 — is Ollama running?".to_string()
+        }
+    })?;
 
-    result
+    if !response.status().is_success() {
+        return Err(format!("Ollama HTTP {}", response.status()));
+    }
+
+    #[derive(Deserialize)]
+    struct TagsResponse { models: Vec<ModelInfo> }
+    #[derive(Deserialize)]
+    struct ModelInfo { name: String }
+
+    let tags: TagsResponse = response.json().await.map_err(|e| {
+        format!("Ollama 响应解析失败: {}", e)
+    })?;
+
+    Ok(tags.models.into_iter().map(|m| m.name).collect())
 }
 
 // ─── Job Queue Commands ─────────────────────────────────────────────────────
@@ -685,4 +742,61 @@ fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
     } else {
         dot / denom
     }
+}
+
+// ─── Curate Fragment Command ────────────────────────────────────────────────
+
+/// Trigger auto-tagging for a newly created fragment.
+///
+/// Calls the Curator Agent's `generate_tags` method and updates the fragment's
+/// frontmatter with the generated tags. Fire-and-forget from the frontend.
+#[tauri::command(async)]
+pub async fn curate_fragment(
+    rig_state: State<'_, RigState>,
+    app_state: State<'_, AppState>,
+    fragment_id: String,
+) -> Result<Vec<String>, String> {
+    // 1. Read fragment content
+    let content = {
+        let repo = app_state.repo.lock().map_err(|e| e.to_string())?;
+        let (_meta, body) = repo.read_fragment(&fragment_id).map_err(|e| e.to_string())?;
+        body
+    };
+
+    // 2. Get Curator Agent
+    let agent = match rig_state.registry.curator_agent().await {
+        Ok(a) => a,
+        Err(e) => {
+            log::info!("[curate_fragment] Curator Agent not available: {}", e);
+            return Ok(vec![]);
+        }
+    };
+
+    // 3. Generate tags
+    let tags = agent
+        .generate_tags(&content)
+        .await
+        .unwrap_or_else(|e| {
+            log::warn!("[curate_fragment] Tag generation failed: {}", e);
+            vec![]
+        });
+
+    if tags.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // 4. Update fragment frontmatter with generated tags
+    {
+        let repo = app_state.repo.lock().map_err(|e| e.to_string())?;
+        // Re-read to get current meta, update tags, and write back
+        let (mut meta, body) = repo.read_fragment(&fragment_id).map_err(|e| e.to_string())?;
+        meta.tags = tags.clone();
+        let document = crate::core::frontmatter::serialize(&meta, &body)
+            .map_err(|e| e.to_string())?;
+        let file_path = repo.find_fragment_path(&fragment_id).map_err(|e| e.to_string())?;
+        std::fs::write(&file_path, &document).map_err(|e| e.to_string())?;
+    }
+
+    log::info!("[curate_fragment] Generated tags for {}: {:?}", fragment_id, tags);
+    Ok(tags)
 }

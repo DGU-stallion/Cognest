@@ -26,8 +26,9 @@ mod tests {
 
     /// Generate a non-empty body string (at least 1 non-whitespace char)
     fn arb_body() -> impl Strategy<Value = String> {
-        // A non-whitespace char followed by 0-200 arbitrary printable chars
-        ("[^ \\t\\n\\r][\\x20-\\x7E]{0,200}")
+        // A visible ASCII char followed by 0-200 arbitrary printable chars
+        // Use [!-~] which is printable ASCII (0x21-0x7E) to guarantee non-whitespace start
+        "[!-~][\\x20-\\x7E]{0,200}"
             .prop_map(|s| s)
     }
 

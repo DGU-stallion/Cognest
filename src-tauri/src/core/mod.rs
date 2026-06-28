@@ -9,10 +9,17 @@ pub mod git;
 
 // Phase 2 — AI capability modules
 pub mod embedding;
-pub mod llm;
 pub mod settings;
 pub mod jobs;
-pub mod agents;
+
+// Phase 3 — Rig Agent 层 (async-first, replaces old llm + agents modules)
+pub mod rig_agents;
+
+// Phase 3 — CLI Agent 进程管理
+pub mod cli_agents;
+
+// Reflection agent — 从 agents/ 迁出的独立模块
+pub mod reflection;
 
 #[cfg(test)]
 mod properties;

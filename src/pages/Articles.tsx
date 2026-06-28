@@ -13,11 +13,6 @@ const STATUS_OPTIONS: { key: ArticleStatus | 'all'; label: string }[] = [
   { key: 'archived', label: '已归档' },
 ];
 
-const STATUS_LABELS: Record<ArticleStatus, string> = {
-  draft: '草稿',
-  archived: '已归档',
-};
-
 function formatWordCount(count: number): string {
   return (count ?? 0).toLocaleString('zh-CN');
 }

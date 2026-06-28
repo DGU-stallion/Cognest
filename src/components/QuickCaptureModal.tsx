@@ -46,9 +46,13 @@ export default function QuickCaptureModal({ open, onClose }: QuickCaptureModalPr
 
     setSaving(true);
     try {
-      await invoke('create_fragment', { content: trimmed });
+      const fragmentId = await invoke<string>('create_fragment', { content: trimmed });
       showToast('已保存碎片', 'success');
       handleClose();
+      // Fire-and-forget: trigger AI auto-tagging for the new fragment
+      invoke('curate_fragment', { fragmentId }).catch(() => {
+        // Non-critical — silently ignore if AI is unavailable
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       showToast(`保存失败: ${message}`, 'error');

@@ -1,19 +1,21 @@
 mod commands;
-mod core;
+pub mod core;
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use commands::AppState;
-use commands::ai::AiState;
+use commands::ai::{AiState, RigState};
+use commands::cli_agents::CliAgentState;
 use tauri::{Emitter, Manager};
 
-use crate::core::agents::reflection::{ReflectionAgent, ReflectionScheduler};
+use crate::core::reflection::{ReflectionAgent, ReflectionScheduler};
 use crate::core::embedding::EmbeddingEngine;
 use crate::core::index::IndexDb;
 use crate::core::jobs::{JobQueue, WorkerContext};
-use crate::core::llm::LlmGateway;
 use crate::core::repo::FileRepo;
+use crate::core::rig_agents::registry::AgentRegistry;
+use crate::core::cli_agents::AgentProcessManager;
 use crate::core::settings::SettingsManager;
 use crate::core::watcher;
 
@@ -173,26 +175,7 @@ pub fn run() {
                 }
             };
 
-            // 3. LlmGateway
-            let llm = {
-                let settings_guard = settings.lock().expect("无法获取 settings 锁");
-                match LlmGateway::from_config(&settings_guard) {
-                    Ok(gateway) => {
-                        log::info!("LlmGateway 初始化成功");
-                        Arc::new(Mutex::new(gateway))
-                    }
-                    Err(e) => {
-                        log::info!(
-                            "LlmGateway 初始化为空 (未配置 Provider): {}",
-                            e
-                        );
-                        // Create an empty gateway — NoProvider errors will be returned on use
-                        Arc::new(Mutex::new(LlmGateway::empty()))
-                    }
-                }
-            };
-
-            // 4. JobQueue — reuse the SQLite connection from AppState
+            // 3. JobQueue — reuse the SQLite connection from AppState
             let db_path = vault_path.join(".cognest").join("index.sqlite");
             let job_db = Arc::new(Mutex::new(
                 rusqlite::Connection::open(&db_path)
@@ -208,15 +191,36 @@ pub fn run() {
             let job_queue = Arc::new(JobQueue::new(job_db, event_emitter));
             log::info!("JobQueue 初始化成功");
 
-            // 5. Create AiState and manage it
+            // 4. Create AiState and manage it
             let ai_state = AiState {
                 embedding: embedding.clone(),
-                llm: llm.clone(),
                 jobs: job_queue.clone(),
                 settings: settings.clone(),
             };
             app.manage(ai_state);
             log::info!("AiState 已注册到 Tauri");
+
+            // 5. Initialize Rig AgentRegistry and register RigState
+            //    Note: rig-core requires a tokio runtime context for agent building.
+            //    We defer actual agent construction to first use (lazy init) by creating
+            //    the registry without building agents upfront, then letting the first
+            //    async command trigger the build in Tauri's tokio runtime context.
+            let rig_settings = settings.clone();
+            let rig_state = {
+                let settings_guard = rig_settings.lock().expect("无法获取 settings 锁");
+                let current_settings = settings_guard.load().unwrap_or_default();
+                let registry = AgentRegistry::new_deferred(current_settings, rig_settings.clone());
+                RigState { registry }
+            };
+            app.manage(rig_state);
+            log::info!("RigState (AgentRegistry) 已注册到 Tauri (延迟初始化)");
+
+            // 6. Initialize CliAgentState and register
+            let cli_agent_state = CliAgentState {
+                manager: AgentProcessManager::new(),
+            };
+            app.manage(cli_agent_state);
+            log::info!("CliAgentState 已注册到 Tauri");
 
             // ─── Background Threads ─────────────────────────────────────────
 
@@ -326,7 +330,6 @@ pub fn run() {
             let repo_for_workers = Arc::new(Mutex::new(FileRepo::new(vault_path.clone())));
             let worker_context = Arc::new(WorkerContext {
                 embedding: embedding.clone(),
-                llm: llm.clone(),
                 repo: repo_for_workers,
                 index: index_arc.clone(),
             });
@@ -420,6 +423,11 @@ pub fn run() {
             commands::ai::list_jobs,
             commands::ai::cancel_job,
             commands::ai::get_audit_log,
+            commands::ai::curate_fragment,
+            // CLI Agent commands
+            commands::cli_agents::detect_cli_agents,
+            commands::cli_agents::spawn_cli_agent,
+            commands::cli_agents::kill_cli_agent,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

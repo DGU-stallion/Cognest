@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAppStore } from './stores/appStore';
+import type { AppPage } from './stores/appStore';
 import { useComposeStore } from './stores/composeStore';
 import { useStartup } from './hooks/useStartup';
 import Sidebar from './components/Sidebar';
@@ -12,8 +13,6 @@ import Discover from './pages/Discover';
 import Compose from './pages/Compose';
 import Capture from './pages/Capture';
 import Articles from './pages/Articles';
-
-type AppPage = 'discover' | 'compose' | 'capture' | 'articles';
 
 const PAGE_MAP: Record<AppPage, React.ComponentType> = {
   discover: Discover,
